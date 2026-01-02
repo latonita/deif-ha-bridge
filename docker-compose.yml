@@ -1,0 +1,26 @@
+services:
+  deif-mqtt:
+    build: .
+    container_name: deif-mqtt
+    restart: unless-stopped
+
+    # Load your config
+    env_file:
+      - .env
+
+    # Map the RS-485 adapter into the container
+    devices:
+      - /dev/ttyUSB0:/dev/ttyUSB0
+
+    # Most Debian hosts put ttyUSB0 in group "dialout" (often GID 20)
+    # This grants the container process access without running privileged.
+    group_add:
+      - "dialout"
+
+    # If your host uses a different GID for dialout, use the numeric GID instead:
+    # group_add:
+    #   - "20"
+
+    # Optional: make device nodes visible if your system is restrictive
+    # (Usually not needed if 'devices:' is set)
+    # privileged: true
