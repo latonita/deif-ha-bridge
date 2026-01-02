@@ -99,6 +99,117 @@ const ALARM_START = 1000;
 const ALARM_END = 1015;
 const ALARM_COUNT = (ALARM_END - ALARM_START) + 1;
 
+// Alarm descriptions: key format is "register:bit"
+const ALARM_MAP = {
+  // 1000 Protection alarms
+  '1000:0':  { code: '1000', text: 'G -P> 1' },
+  '1000:3':  { code: '1030', text: 'G I> 1' },
+  '1000:4':  { code: '1040', text: 'G I> 2' },
+  '1000:9':  { code: '1130', text: 'G I>> 1' },
+  '1000:10': { code: '1140', text: 'G I>> 2' },
+  '1000:11': { code: '1150', text: 'G U> 1' },
+  '1000:12': { code: '1160', text: 'G U> 2' },
+  '1000:13': { code: '1170', text: 'G U< 1' },
+  '1000:14': { code: '1180', text: 'G U< 2' },
+
+  // 1001 Protection alarms
+  '1001:0':  { code: '1210', text: 'G f> 1' },
+  '1001:1':  { code: '1220', text: 'G f> 2' },
+  '1001:3':  { code: '1240', text: 'G f< 1' },
+  '1001:4':  { code: '1250', text: 'G f< 2' },
+  '1001:6':  { code: 'no code', text: 'BB U> 1' },
+  '1001:7':  { code: 'no code', text: 'BB U> 2' },
+  '1001:9':  { code: 'no code', text: 'BB U< 1' },
+  '1001:10': { code: 'no code', text: 'BB U< 2' },
+  '1001:13': { code: 'no code', text: 'BB f> 1' },
+  '1001:14': { code: 'no code', text: 'BB f> 2' },
+
+  // 1002 Protection alarms
+  '1002:0':  { code: 'no code', text: 'BB f< 1' },
+  '1002:1':  { code: 'no code', text: 'BB f< 2' },
+  '1002:7':  { code: '1450', text: 'G P> 1' },
+  '1002:8':  { code: '1460', text: 'G P> 2' },
+  '1002:14': { code: 'no code', text: '-Q>' },
+  '1002:15': { code: 'no code', text: 'Q>' },
+
+  // 1003 Protection alarms
+  '1003:7':  { code: '1620', text: 'Mains unbalanced voltage' },
+
+  // 1005 Synchronisation alarms
+  '1005:3':  { code: '2150', text: 'Phase seq error' },
+  '1005:4':  { code: '2160', text: 'GB open failure' },
+  '1005:5':  { code: '2170', text: 'GB close failure' },
+  '1005:6':  { code: 'no code', text: 'GB pos failure' },
+  '1005:7':  { code: '2200', text: 'MB open failure' },
+  '1005:8':  { code: '2210', text: 'MB close failure' },
+  '1005:9':  { code: 'no code', text: 'MB pos failure' },
+
+  // 1007 Digital inputs
+  '1007:0':  { code: '3000', text: 'Dig. input 1' },
+  '1007:1':  { code: '3010', text: 'Dig. input 2' },
+  '1007:2':  { code: '3020', text: 'Dig. input 3' },
+  '1007:3':  { code: '3030', text: 'Dig. input 4' },
+  '1007:4':  { code: '3040', text: 'Dig. input 5' },
+  '1007:5':  { code: '3050', text: 'Dig. input 6' },
+
+  // 1010 Protection alarms (multi-inputs)
+  '1010:0':  { code: '3400', text: 'Dig. multi-input 1' },
+  '1010:1':  { code: '3410', text: 'Dig. multi-input 2' },
+  '1010:2':  { code: '3420', text: 'Dig. multi-input 3' },
+  '1010:3':  { code: '3404', text: 'Wire failure, dig. multi-input 1' },
+  '1010:4':  { code: '3404', text: 'Wire failure, dig. multi-input 2' },
+  '1010:5':  { code: '3424', text: 'Wire failure, dig. multi-input 3' },
+  '1010:12': { code: '3490', text: 'Dig. input 19-20/Emergency STOP' },
+
+  // 1013 Analogue inputs
+  '1013:0':  { code: 'no code', text: 'Multi-input 1.1' },
+  '1013:1':  { code: 'no code', text: 'Multi-input 1.2' },
+  '1013:2':  { code: 'no code', text: 'W. failure, multi-input 1' },
+  '1013:3':  { code: 'no code', text: 'Multi-input 2.1' },
+  '1013:4':  { code: 'no code', text: 'Multi-input 2.2' },
+  '1013:5':  { code: 'no code', text: 'W. failure, multi-input 2' },
+  '1013:6':  { code: 'no code', text: 'Multi-input 3.1' },
+  '1013:7':  { code: 'no code', text: 'Multi-input 3.2' },
+  '1013:8':  { code: 'no code', text: 'W. failure, multi-input 3' },
+  '1013:9':  { code: '4510', text: 'Overspeed 1' },
+  '1013:10': { code: '4520', text: 'Overspeed 2' },
+  '1013:11': { code: '4620', text: 'VDO fuel level 1.3' },
+  '1013:12': { code: '4610', text: 'Charger gen' },
+  '1013:13': { code: '4600', text: 'V-Belt' },
+  '1013:14': { code: '4560', text: 'Generator Hz/V failure' },
+  '1013:15': { code: 'no code', text: 'Start failure' },
+
+  // 1014 Analogue inputs
+  '1014:0':  { code: '4580', text: 'Stop failure' },
+  '1014:1':  { code: '4960', text: 'U< aux. supply term. 1' },
+  '1014:2':  { code: '4970', text: 'U> aux. supply term. 1' },
+  '1014:5':  { code: '4610', text: 'Charger Gen' },
+
+  // 1015 System/general alarms
+  '1015:0':  { code: '6110', text: 'Service timer 1' },
+  '1015:1':  { code: '6120', text: 'Service timer 2' },
+  '1015:13': { code: 'no code', text: 'Fuel fill check' },
+
+  // 1016 Relay outputs
+  '1016:0':  { code: '5000', text: 'Relay 21' },
+  '1016:1':  { code: '5010', text: 'Relay 22' },
+  '1016:2':  { code: '5020', text: 'Relay 23' },
+  '1016:3':  { code: '5030', text: 'Relay 24' },
+  '1016:4':  { code: '5040', text: 'Relay 26' },
+  '1016:5':  { code: 'no code', text: 'GB On' },
+  '1016:6':  { code: 'no code', text: 'MB On' },
+  '1016:11': { code: '5110', text: 'Relay 3' },
+
+  // 1018 Status
+  '1018:0':  { code: 'no code', text: 'Mains failure' },
+  '1018:1':  { code: 'no code', text: 'MB pos ON' },
+  '1018:4':  { code: 'no code', text: 'GB pos ON' },
+  '1018:6':  { code: 'no code', text: 'Engine running' },
+  '1018:7':  { code: 'no code', text: 'Running detection, timer expired' },
+  '1018:8':  { code: 'no code', text: 'DG Hz/V OK, timer expired' }
+};
+
+
 /* =========================
    HELPERS
    ========================= */
@@ -112,9 +223,11 @@ function s16(x) {
 }
 
 function fmtAppVersion(raw) {
-  const major = Math.floor(raw / 100);
-  const minor = raw % 100;
-  return `${major}.${String(minor).padStart(2, '0')}`;
+  const str = String(raw).padStart(4, '0');
+  const first = str.charAt(0);
+  const second = str.charAt(1);
+  const lastTwo = str.slice(2);
+  return `${first}.${second}.${lastTwo}`;
 }
 
 function freqFloat(x) {
@@ -123,6 +236,38 @@ function freqFloat(x) {
 
 function toHex(x) {
   return '0x' + (x & 0xffff).toString(16).toUpperCase().padStart(4, '0');
+}
+
+function decodeAlarms(alarmRegs) {
+  const active = [];
+  for (let i = 0; i < alarmRegs.length; i++) {
+    const regAddr = ALARM_START + i;
+    const regValue = alarmRegs[i];
+    
+    // Check each bit in the register
+    for (let bit = 0; bit < 16; bit++) {
+      if (regValue & (1 << bit)) {
+        const key = `${regAddr}:${bit}`;
+        const alarm = ALARM_MAP[key];
+        if (alarm) {
+          active.push({
+            register: regAddr,
+            bit,
+            code: alarm.code,
+            text: alarm.text
+          });
+        }
+      }
+    }
+  }
+  return active;
+}
+
+function formatActiveAlarms(activeAlarms) {
+  if (!activeAlarms || activeAlarms.length === 0) {
+    return 'No active alarms';
+  }
+  return activeAlarms.map(a => `${a.code} ${a.text}`).join('\n');
 }
 
 function publish(mq, key, value, retainOverride) {
@@ -160,12 +305,15 @@ function publishHassDiscovery(mq) {
     const objectId = `${HASS_NODE_ID}-${key}`;
     const topic = `${HASS_DISCOVERY_PREFIX}/sensor/${HASS_NODE_ID}/${key}/config`;
 
+    // Use custom value template if provided, otherwise build from jsonPath
+    const valueTemplate = cfg.valueTemplate || `{{ value_json.${cfg.jsonPath} | is_defined }}`;
+
     const payload = {
       name: cfg.name,
       uniq_id: objectId,
       obj_id: objectId,
       stat_t: stateTopic,
-      val_tpl: `{{ value_json.${cfg.jsonPath} | is_defined }}`,
+      val_tpl: valueTemplate,
       en: true,
       force_update: true,
       device,
@@ -237,24 +385,25 @@ function publishHassDiscovery(mq) {
     { key: 'alarm_count', name: 'Alarms Total', jsonPath: 'alarms.count', stateClass: 'measurement', entityCategory: 'diagnostic', icon: 'mdi:counter' },
     { key: 'alarm_unacknowledged', name: 'Alarms Unacknowledged', jsonPath: 'alarms.unacknowledged', stateClass: 'measurement', entityCategory: 'diagnostic', icon: 'mdi:alert-circle' },
     { key: 'alarm_ack_active', name: 'Alarms Acknowledged Active', jsonPath: 'alarms.ack_active', stateClass: 'measurement', entityCategory: 'diagnostic', icon: 'mdi:alert-circle-check' },
+    { key: 'active_alarms_text', name: 'Active Alarms', jsonPath: 'alarms.active_text', entityCategory: 'diagnostic', icon: 'mdi:alarm-light' },
 
     // Alarm bitfields (raw hex)
-    { key: 'alarm_bitfield_1000', name: 'Alarm Bitfield 1000', jsonPath: 'alarms.bitfield.1000', entityCategory: 'diagnostic', icon: 'mdi:code-brackets' },
-    { key: 'alarm_bitfield_1001', name: 'Alarm Bitfield 1001', jsonPath: 'alarms.bitfield.1001', entityCategory: 'diagnostic', icon: 'mdi:code-brackets' },
-    { key: 'alarm_bitfield_1002', name: 'Alarm Bitfield 1002', jsonPath: 'alarms.bitfield.1002', entityCategory: 'diagnostic', icon: 'mdi:code-brackets' },
-    { key: 'alarm_bitfield_1003', name: 'Alarm Bitfield 1003', jsonPath: 'alarms.bitfield.1003', entityCategory: 'diagnostic', icon: 'mdi:code-brackets' },
-    { key: 'alarm_bitfield_1004', name: 'Alarm Bitfield 1004', jsonPath: 'alarms.bitfield.1004', entityCategory: 'diagnostic', icon: 'mdi:code-brackets' },
-    { key: 'alarm_bitfield_1005', name: 'Alarm Bitfield 1005', jsonPath: 'alarms.bitfield.1005', entityCategory: 'diagnostic', icon: 'mdi:code-brackets' },
-    { key: 'alarm_bitfield_1006', name: 'Alarm Bitfield 1006', jsonPath: 'alarms.bitfield.1006', entityCategory: 'diagnostic', icon: 'mdi:code-brackets' },
-    { key: 'alarm_bitfield_1007', name: 'Alarm Bitfield 1007', jsonPath: 'alarms.bitfield.1007', entityCategory: 'diagnostic', icon: 'mdi:code-brackets' },
-    { key: 'alarm_bitfield_1008', name: 'Alarm Bitfield 1008', jsonPath: 'alarms.bitfield.1008', entityCategory: 'diagnostic', icon: 'mdi:code-brackets' },
-    { key: 'alarm_bitfield_1009', name: 'Alarm Bitfield 1009', jsonPath: 'alarms.bitfield.1009', entityCategory: 'diagnostic', icon: 'mdi:code-brackets' },
-    { key: 'alarm_bitfield_1010', name: 'Alarm Bitfield 1010', jsonPath: 'alarms.bitfield.1010', entityCategory: 'diagnostic', icon: 'mdi:code-brackets' },
-    { key: 'alarm_bitfield_1011', name: 'Alarm Bitfield 1011', jsonPath: 'alarms.bitfield.1011', entityCategory: 'diagnostic', icon: 'mdi:code-brackets' },
-    { key: 'alarm_bitfield_1012', name: 'Alarm Bitfield 1012', jsonPath: 'alarms.bitfield.1012', entityCategory: 'diagnostic', icon: 'mdi:code-brackets' },
-    { key: 'alarm_bitfield_1013', name: 'Alarm Bitfield 1013', jsonPath: 'alarms.bitfield.1013', entityCategory: 'diagnostic', icon: 'mdi:code-brackets' },
-    { key: 'alarm_bitfield_1014', name: 'Alarm Bitfield 1014', jsonPath: 'alarms.bitfield.1014', entityCategory: 'diagnostic', icon: 'mdi:code-brackets' },
-    { key: 'alarm_bitfield_1015', name: 'Alarm Bitfield 1015', jsonPath: 'alarms.bitfield.1015', entityCategory: 'diagnostic', icon: 'mdi:code-brackets' },
+    { key: 'alarm_bitfield_1000', name: 'Alarm Bitfield 1000', valueTemplate: "{{ value_json.alarms.bitfield['1000'] | is_defined }}", entityCategory: 'diagnostic', icon: 'mdi:code-brackets' },
+    { key: 'alarm_bitfield_1001', name: 'Alarm Bitfield 1001', valueTemplate: "{{ value_json.alarms.bitfield['1001'] | is_defined }}", entityCategory: 'diagnostic', icon: 'mdi:code-brackets' },
+    { key: 'alarm_bitfield_1002', name: 'Alarm Bitfield 1002', valueTemplate: "{{ value_json.alarms.bitfield['1002'] | is_defined }}", entityCategory: 'diagnostic', icon: 'mdi:code-brackets' },
+    { key: 'alarm_bitfield_1003', name: 'Alarm Bitfield 1003', valueTemplate: "{{ value_json.alarms.bitfield['1003'] | is_defined }}", entityCategory: 'diagnostic', icon: 'mdi:code-brackets' },
+    { key: 'alarm_bitfield_1004', name: 'Alarm Bitfield 1004', valueTemplate: "{{ value_json.alarms.bitfield['1004'] | is_defined }}", entityCategory: 'diagnostic', icon: 'mdi:code-brackets' },
+    { key: 'alarm_bitfield_1005', name: 'Alarm Bitfield 1005', valueTemplate: "{{ value_json.alarms.bitfield['1005'] | is_defined }}", entityCategory: 'diagnostic', icon: 'mdi:code-brackets' },
+    { key: 'alarm_bitfield_1006', name: 'Alarm Bitfield 1006', valueTemplate: "{{ value_json.alarms.bitfield['1006'] | is_defined }}", entityCategory: 'diagnostic', icon: 'mdi:code-brackets' },
+    { key: 'alarm_bitfield_1007', name: 'Alarm Bitfield 1007', valueTemplate: "{{ value_json.alarms.bitfield['1007'] | is_defined }}", entityCategory: 'diagnostic', icon: 'mdi:code-brackets' },
+    { key: 'alarm_bitfield_1008', name: 'Alarm Bitfield 1008', valueTemplate: "{{ value_json.alarms.bitfield['1008'] | is_defined }}", entityCategory: 'diagnostic', icon: 'mdi:code-brackets' },
+    { key: 'alarm_bitfield_1009', name: 'Alarm Bitfield 1009', valueTemplate: "{{ value_json.alarms.bitfield['1009'] | is_defined }}", entityCategory: 'diagnostic', icon: 'mdi:code-brackets' },
+    { key: 'alarm_bitfield_1010', name: 'Alarm Bitfield 1010', valueTemplate: "{{ value_json.alarms.bitfield['1010'] | is_defined }}", entityCategory: 'diagnostic', icon: 'mdi:code-brackets' },
+    { key: 'alarm_bitfield_1011', name: 'Alarm Bitfield 1011', valueTemplate: "{{ value_json.alarms.bitfield['1011'] | is_defined }}", entityCategory: 'diagnostic', icon: 'mdi:code-brackets' },
+    { key: 'alarm_bitfield_1012', name: 'Alarm Bitfield 1012', valueTemplate: "{{ value_json.alarms.bitfield['1012'] | is_defined }}", entityCategory: 'diagnostic', icon: 'mdi:code-brackets' },
+    { key: 'alarm_bitfield_1013', name: 'Alarm Bitfield 1013', valueTemplate: "{{ value_json.alarms.bitfield['1013'] | is_defined }}", entityCategory: 'diagnostic', icon: 'mdi:code-brackets' },
+    { key: 'alarm_bitfield_1014', name: 'Alarm Bitfield 1014', valueTemplate: "{{ value_json.alarms.bitfield['1014'] | is_defined }}", entityCategory: 'diagnostic', icon: 'mdi:code-brackets' },
+    { key: 'alarm_bitfield_1015', name: 'Alarm Bitfield 1015', valueTemplate: "{{ value_json.alarms.bitfield['1015'] | is_defined }}", entityCategory: 'diagnostic', icon: 'mdi:code-brackets' },
 
     // Counters / operations
     { key: 'gen_breaker_ops', name: 'Generator Breaker Operations', jsonPath: 'counters.gen_breaker_ops', stateClass: 'total_increasing', entityCategory: 'diagnostic', icon: 'mdi:electric-switch' },
@@ -359,7 +508,8 @@ function publishHassDiscovery(mq) {
       count: getReg(b, R.ALARM_COUNT),
       unacknowledged: getReg(b, R.ALARM_UNACK),
       ack_active: getReg(b, R.ALARM_ACK_ACTIVE),
-      bitfield: {}
+      bitfield: {},
+      active: []
     };
 
     // Add alarm bitfields as hex strings
@@ -367,6 +517,10 @@ function publishHassDiscovery(mq) {
       const regAddr = ALARM_START + i;
       alarms.bitfield[regAddr] = toHex(alarmRegs[i]);
     }
+
+    // Decode active alarms with descriptions
+    alarms.active = decodeAlarms(alarmRegs);
+    alarms.active_text = formatActiveAlarms(alarms.active);
 
     const counters = {
       gen_breaker_ops: getReg(b, R.GB_OPERATIONS),
