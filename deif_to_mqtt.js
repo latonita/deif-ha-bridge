@@ -78,12 +78,20 @@ const R = {
   RUN_HI: 554, // Absolute running hour counter 
   RUN_LO: 555,
 
-  USUPPLY: 567, // V/10 Supply voltage i.e. battery/PSU
+  ALARM_COUNT: 558,           // Number of alarms
+  ALARM_UNACK: 559,           // Number of unacknowledged alarms
+  ALARM_ACK_ACTIVE: 560,      // Number of acknowledged active alarms
+
+  GB_OPERATIONS: 563,         // Generator/circuit breaker operations counter
+  MB_OPERATIONS: 564,         // Mains breaker operation counter
+  START_ATTEMPTS: 566,        // Number of start attempts
+  USUPPLY: 567,               // V/10 Supply voltage i.e. battery/PSU
+  RPM: 576,                   // Running feedback RPM
 };
 
-// We'll read one continuous block from 500 to 567 inclusive.
+// We'll read one continuous block from 500 to 576 inclusive.
 const MEAS_START = 500;
-const MEAS_END = 567;
+const MEAS_END = 576;
 const MEAS_COUNT = (MEAS_END - MEAS_START) + 1;
 
 /* =========================
@@ -196,6 +204,17 @@ function publishHassDiscovery(mq) {
     // Signed energy (negative) as diagnostic only
     { key: 'energy_signed_kwh', name: 'Generator Energy (Signed)', jsonPath: 'energy_signed_kwh', unit: 'kWh', entityCategory: 'diagnostic', icon: 'mdi:swap-horizontal' },
 
+    // Alarms
+    { key: 'alarm_count', name: 'Total Alarms', jsonPath: 'alarms.count', stateClass: 'measurement', entityCategory: 'diagnostic', icon: 'mdi:counter' },
+    { key: 'alarm_unacknowledged', name: 'Unacknowledged Alarms', jsonPath: 'alarms.unacknowledged', stateClass: 'measurement', entityCategory: 'diagnostic', icon: 'mdi:alert-circle' },
+    { key: 'alarm_ack_active', name: 'Acknowledged Active Alarms', jsonPath: 'alarms.ack_active', stateClass: 'measurement', entityCategory: 'diagnostic', icon: 'mdi:alert-circle-check' },
+
+    // Counters / operations
+    { key: 'gen_breaker_ops', name: 'Generator Breaker Operations', jsonPath: 'counters.gen_breaker_ops', stateClass: 'total_increasing', entityCategory: 'diagnostic', icon: 'mdi:electric-switch' },
+    { key: 'mains_breaker_ops', name: 'Mains Breaker Operations', jsonPath: 'counters.mains_breaker_ops', stateClass: 'total_increasing', entityCategory: 'diagnostic', icon: 'mdi:electric-switch' },
+    { key: 'start_attempts', name: 'Start Attempts', jsonPath: 'counters.start_attempts', stateClass: 'total_increasing', entityCategory: 'diagnostic', icon: 'mdi:restart' },
+
+    { key: 'rpm', name: 'Engine RPM', jsonPath: 'rpm', unit: 'RPM', stateClass: 'measurement', entityCategory: 'diagnostic', icon: 'mdi:engine' },
     { key: 'usupply_v', name: 'Battery Voltage', jsonPath: 'usupply_v', deviceClass: 'voltage', unit: 'V', stateClass: 'measurement', entityCategory: 'diagnostic', icon: 'mdi:car-battery' },
   ];
 
@@ -238,8 +257,8 @@ function publishHassDiscovery(mq) {
   publish(mq, 'device/manufacturer', DEVICE_MANUFACTURER, true);
   publish(mq, 'device/name', DEVICE_NAME, true);
 
-  async function pollOnce() {
-    // Read measurement table block 500..567
+  async function readAndPublish() {
+    // Read measurement table block 500..576
     const b = await readInputBlock(mb, MEAS_START, MEAS_COUNT);
 
     const appRaw = getReg(b, R.APP_VERSION);
@@ -272,6 +291,19 @@ function publishHassDiscovery(mq) {
     const energyKwh = u32(getReg(b, R.EGEN_HI), getReg(b, R.EGEN_LO));
     const energySignedKwh = -energyKwh;
 
+    const alarms = {
+      count: getReg(b, R.ALARM_COUNT),
+      unacknowledged: getReg(b, R.ALARM_UNACK),
+      ack_active: getReg(b, R.ALARM_ACK_ACTIVE),
+    };
+
+    const counters = {
+      gen_breaker_ops: getReg(b, R.GB_OPERATIONS),
+      mains_breaker_ops: getReg(b, R.MB_OPERATIONS),
+      start_attempts: getReg(b, R.START_ATTEMPTS),
+    };
+
+    const rpm = getReg(b, R.RPM);
     const usupplyV = Number.parseFloat((getReg(b, R.USUPPLY) / 10.0).toFixed(1));
 
     publish(mq, 'state', {
@@ -287,6 +319,9 @@ function publishHassDiscovery(mq) {
       run_hours: runHours,
       energy_kwh: energyKwh,
       energy_signed_kwh: energySignedKwh,
+      alarms,
+      counters,
+      rpm,
       usupply_v: usupplyV,
       ts: new Date().toISOString(),
     });
@@ -294,7 +329,7 @@ function publishHassDiscovery(mq) {
 
   const run = async () => {
     try {
-      await pollOnce();
+      await readAndPublish();
     } catch (err) {
       console.error('Poll error:', err && err.message ? err.message : err);
     }
