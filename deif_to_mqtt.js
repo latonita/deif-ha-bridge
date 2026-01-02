@@ -94,6 +94,11 @@ const MEAS_START = 500;
 const MEAS_END = 576;
 const MEAS_COUNT = (MEAS_END - MEAS_START) + 1;
 
+// Alarm bitfield registers
+const ALARM_START = 1000;
+const ALARM_END = 1015;
+const ALARM_COUNT = (ALARM_END - ALARM_START) + 1;
+
 /* =========================
    HELPERS
    ========================= */
@@ -114,6 +119,10 @@ function fmtAppVersion(raw) {
 
 function freqFloat(x) {
   return Number.parseFloat(Number(x).toFixed(FREQ_DECIMALS));
+}
+
+function toHex(x) {
+  return '0x' + (x & 0xffff).toString(16).toUpperCase().padStart(4, '0');
 }
 
 function publish(mq, key, value, retainOverride) {
@@ -170,6 +179,26 @@ function publishHassDiscovery(mq) {
     mq.publish(topic, JSON.stringify(payload), { qos: 0, retain: true });
   }
 
+  function pubBinarySensor(key, cfg) {
+    const objectId = `${HASS_NODE_ID}-${key}`;
+    const topic = `${HASS_DISCOVERY_PREFIX}/binary_sensor/${HASS_NODE_ID}/${key}/config`;
+
+    const payload = {
+      name: cfg.name,
+      uniq_id: objectId,
+      obj_id: objectId,
+      stat_t: stateTopic,
+      val_tpl: cfg.valueTemplate,
+      en: true,
+      device,
+      ...(cfg.icon ? { ic: cfg.icon } : {}),
+      ...(cfg.deviceClass ? { dev_cla: cfg.deviceClass } : {}),
+      ...(cfg.entityCategory ? { ent_cat: cfg.entityCategory } : {}),
+    };
+
+    mq.publish(topic, JSON.stringify(payload), { qos: 0, retain: true });
+  }
+
   const sensors = [
     // Metadata / diagnostics
     { key: 'app_version', name: 'App Version', jsonPath: 'app_version', entityCategory: 'diagnostic', icon: 'mdi:information' },
@@ -205,9 +234,27 @@ function publishHassDiscovery(mq) {
     { key: 'energy_signed_kwh', name: 'Generator Energy (Signed)', jsonPath: 'energy_signed_kwh', unit: 'kWh', entityCategory: 'diagnostic', icon: 'mdi:swap-horizontal' },
 
     // Alarms
-    { key: 'alarm_count', name: 'Total Alarms', jsonPath: 'alarms.count', stateClass: 'measurement', entityCategory: 'diagnostic', icon: 'mdi:counter' },
-    { key: 'alarm_unacknowledged', name: 'Unacknowledged Alarms', jsonPath: 'alarms.unacknowledged', stateClass: 'measurement', entityCategory: 'diagnostic', icon: 'mdi:alert-circle' },
-    { key: 'alarm_ack_active', name: 'Acknowledged Active Alarms', jsonPath: 'alarms.ack_active', stateClass: 'measurement', entityCategory: 'diagnostic', icon: 'mdi:alert-circle-check' },
+    { key: 'alarm_count', name: 'Alarms Total', jsonPath: 'alarms.count', stateClass: 'measurement', entityCategory: 'diagnostic', icon: 'mdi:counter' },
+    { key: 'alarm_unacknowledged', name: 'Alarms Unacknowledged', jsonPath: 'alarms.unacknowledged', stateClass: 'measurement', entityCategory: 'diagnostic', icon: 'mdi:alert-circle' },
+    { key: 'alarm_ack_active', name: 'Alarms Acknowledged Active', jsonPath: 'alarms.ack_active', stateClass: 'measurement', entityCategory: 'diagnostic', icon: 'mdi:alert-circle-check' },
+
+    // Alarm bitfields (raw hex)
+    { key: 'alarm_bitfield_1000', name: 'Alarm Bitfield 1000', jsonPath: 'alarms.bitfield.1000', entityCategory: 'diagnostic', icon: 'mdi:code-brackets' },
+    { key: 'alarm_bitfield_1001', name: 'Alarm Bitfield 1001', jsonPath: 'alarms.bitfield.1001', entityCategory: 'diagnostic', icon: 'mdi:code-brackets' },
+    { key: 'alarm_bitfield_1002', name: 'Alarm Bitfield 1002', jsonPath: 'alarms.bitfield.1002', entityCategory: 'diagnostic', icon: 'mdi:code-brackets' },
+    { key: 'alarm_bitfield_1003', name: 'Alarm Bitfield 1003', jsonPath: 'alarms.bitfield.1003', entityCategory: 'diagnostic', icon: 'mdi:code-brackets' },
+    { key: 'alarm_bitfield_1004', name: 'Alarm Bitfield 1004', jsonPath: 'alarms.bitfield.1004', entityCategory: 'diagnostic', icon: 'mdi:code-brackets' },
+    { key: 'alarm_bitfield_1005', name: 'Alarm Bitfield 1005', jsonPath: 'alarms.bitfield.1005', entityCategory: 'diagnostic', icon: 'mdi:code-brackets' },
+    { key: 'alarm_bitfield_1006', name: 'Alarm Bitfield 1006', jsonPath: 'alarms.bitfield.1006', entityCategory: 'diagnostic', icon: 'mdi:code-brackets' },
+    { key: 'alarm_bitfield_1007', name: 'Alarm Bitfield 1007', jsonPath: 'alarms.bitfield.1007', entityCategory: 'diagnostic', icon: 'mdi:code-brackets' },
+    { key: 'alarm_bitfield_1008', name: 'Alarm Bitfield 1008', jsonPath: 'alarms.bitfield.1008', entityCategory: 'diagnostic', icon: 'mdi:code-brackets' },
+    { key: 'alarm_bitfield_1009', name: 'Alarm Bitfield 1009', jsonPath: 'alarms.bitfield.1009', entityCategory: 'diagnostic', icon: 'mdi:code-brackets' },
+    { key: 'alarm_bitfield_1010', name: 'Alarm Bitfield 1010', jsonPath: 'alarms.bitfield.1010', entityCategory: 'diagnostic', icon: 'mdi:code-brackets' },
+    { key: 'alarm_bitfield_1011', name: 'Alarm Bitfield 1011', jsonPath: 'alarms.bitfield.1011', entityCategory: 'diagnostic', icon: 'mdi:code-brackets' },
+    { key: 'alarm_bitfield_1012', name: 'Alarm Bitfield 1012', jsonPath: 'alarms.bitfield.1012', entityCategory: 'diagnostic', icon: 'mdi:code-brackets' },
+    { key: 'alarm_bitfield_1013', name: 'Alarm Bitfield 1013', jsonPath: 'alarms.bitfield.1013', entityCategory: 'diagnostic', icon: 'mdi:code-brackets' },
+    { key: 'alarm_bitfield_1014', name: 'Alarm Bitfield 1014', jsonPath: 'alarms.bitfield.1014', entityCategory: 'diagnostic', icon: 'mdi:code-brackets' },
+    { key: 'alarm_bitfield_1015', name: 'Alarm Bitfield 1015', jsonPath: 'alarms.bitfield.1015', entityCategory: 'diagnostic', icon: 'mdi:code-brackets' },
 
     // Counters / operations
     { key: 'gen_breaker_ops', name: 'Generator Breaker Operations', jsonPath: 'counters.gen_breaker_ops', stateClass: 'total_increasing', entityCategory: 'diagnostic', icon: 'mdi:electric-switch' },
@@ -219,6 +266,20 @@ function publishHassDiscovery(mq) {
   ];
 
   for (const s of sensors) pubSensor(s.key, s);
+
+  // Binary sensors
+  const binarySensors = [
+    { 
+      key: 'has_unack_alarms', 
+      name: 'Unacknowledged Alarms Active', 
+      valueTemplate: '{{ "ON" if value_json.alarms.unacknowledged > 0 else "OFF" }}',
+      deviceClass: 'problem',
+      entityCategory: 'diagnostic',
+      icon: 'mdi:alert'
+    },
+  ];
+
+  for (const bs of binarySensors) pubBinarySensor(bs.key, bs);
 }
 
 /* =========================
@@ -261,6 +322,9 @@ function publishHassDiscovery(mq) {
     // Read measurement table block 500..576
     const b = await readInputBlock(mb, MEAS_START, MEAS_COUNT);
 
+    // Read alarm bitfield registers 1000..1015
+    const alarmRegs = await readInputBlock(mb, ALARM_START, ALARM_COUNT);
+
     const appRaw = getReg(b, R.APP_VERSION);
     const appVersion = fmtAppVersion(appRaw);
 
@@ -295,7 +359,14 @@ function publishHassDiscovery(mq) {
       count: getReg(b, R.ALARM_COUNT),
       unacknowledged: getReg(b, R.ALARM_UNACK),
       ack_active: getReg(b, R.ALARM_ACK_ACTIVE),
+      bitfield: {}
     };
+
+    // Add alarm bitfields as hex strings
+    for (let i = 0; i < ALARM_COUNT; i++) {
+      const regAddr = ALARM_START + i;
+      alarms.bitfield[regAddr] = toHex(alarmRegs[i]);
+    }
 
     const counters = {
       gen_breaker_ops: getReg(b, R.GB_OPERATIONS),
