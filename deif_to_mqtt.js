@@ -96,11 +96,11 @@ const MEAS_COUNT = (MEAS_END - MEAS_START) + 1;
 
 // Alarm bitfield registers
 const ALARM_START = 1000;
-const ALARM_END = 1015;
+const ALARM_END = 1019;
 const ALARM_COUNT = (ALARM_END - ALARM_START) + 1;
 
 // Alarm descriptions: key format is "register:bit"
-const ALARM_MAP = {
+const ALARM_AND_STATUS_MAP = {
   // 1000 Protection alarms
   '1000:0':  { code: '1000', text: 'G -P> 1' },
   '1000:3':  { code: '1030', text: 'G I> 1' },
@@ -206,7 +206,17 @@ const ALARM_MAP = {
   '1018:4':  { code: 'no code', text: 'GB pos ON' },
   '1018:6':  { code: 'no code', text: 'Engine running' },
   '1018:7':  { code: 'no code', text: 'Running detection, timer expired' },
-  '1018:8':  { code: 'no code', text: 'DG Hz/V OK, timer expired' }
+  '1018:8':  { code: 'no code', text: 'DG Hz/V OK, timer expired' },
+
+  // 1019 Operating mode status
+  '1019:0':  { code: 'no code', text: 'OFF' },
+  '1019:1':  { code: 'no code', text: 'Manual' },
+  '1019:3':  { code: 'no code', text: 'Auto' },
+  '1019:4':  { code: 'no code', text: 'Test' },
+  '1019:5':  { code: 'no code', text: 'Island' },
+  '1019:6':  { code: 'no code', text: 'AMF' },
+  '1019:10': { code: 'no code', text: 'Load take over' },
+  '1019:15': { code: 'no code', text: 'AMF active' }
 };
 
 
@@ -242,13 +252,20 @@ function decodeAlarms(alarmRegs) {
   const active = [];
   for (let i = 0; i < alarmRegs.length; i++) {
     const regAddr = ALARM_START + i;
+    
+    // Only process specific alarm registers: 1000-1005, 1010, 1011, 1013, 1014, 1015
+    const isAlarmReg = (regAddr >= 1000 && regAddr <= 1005) ||
+                       regAddr === 1010 || regAddr === 1011 ||
+                       regAddr === 1013 || regAddr === 1014 || regAddr === 1015;
+    if (!isAlarmReg) continue;
+    
     const regValue = alarmRegs[i];
     
     // Check each bit in the register
     for (let bit = 0; bit < 16; bit++) {
       if (regValue & (1 << bit)) {
         const key = `${regAddr}:${bit}`;
-        const alarm = ALARM_MAP[key];
+        const alarm = ALARM_AND_STATUS_MAP[key];
         if (alarm) {
           active.push({
             register: regAddr,
@@ -268,6 +285,56 @@ function formatActiveAlarms(activeAlarms) {
     return 'No active alarms';
   }
   return activeAlarms.map(a => `${a.code} ${a.text}`).join('\n');
+}
+
+function decodeStatus(alarmRegs) {
+  const status = {};
+  const statusRegs = [1018, 1019];
+  
+  for (const regAddr of statusRegs) {
+    const regIdx = regAddr - ALARM_START;
+    if (regIdx < 0 || regIdx >= alarmRegs.length) continue;
+    
+    const regValue = alarmRegs[regIdx];
+    
+    // Check each bit in the register
+    for (let bit = 0; bit < 16; bit++) {
+      const key = `${regAddr}:${bit}`;
+      const statusDef = ALARM_AND_STATUS_MAP[key];
+      if (statusDef) {
+        const isActive = !!(regValue & (1 << bit));
+        const statusKey = key.replace(':', '_');
+        status[statusKey] = isActive;
+      }
+    }
+  }
+  
+  return status;
+}
+
+function getOperatingModeText(status) {
+  // Determine primary mode (priority order: OFF > Manual > Test > Auto)
+  let primaryMode = null;
+  
+  if (status['1019_0']) primaryMode = 'OFF';
+  else if (status['1019_1']) primaryMode = 'Manual';
+  else if (status['1019_4']) primaryMode = 'Test';
+  else if (status['1019_3']) primaryMode = 'Auto';
+  
+  if (!primaryMode) primaryMode = 'Unknown';
+  
+  // Collect modifiers
+  const modifiers = [];
+  if (status['1019_6']) modifiers.push('AMF');
+  if (status['1019_10']) modifiers.push('Load Takeover');
+  if (status['1019_15']) modifiers.push('AMF Active');
+  
+  // Format: "Primary (Modifier1, Modifier2)"
+  if (modifiers.length > 0) {
+    return `${primaryMode} (${modifiers.join(', ')})`;
+  }
+  
+  return primaryMode;
 }
 
 function publish(mq, key, value, retainOverride) {
@@ -372,20 +439,26 @@ function publishHassDiscovery(mq) {
     { key: 'mains_voltage_l3n', name: 'Mains Voltage L3-N', jsonPath: 'mains.voltage_l3n_v', deviceClass: 'voltage', unit: 'V', stateClass: 'measurement', icon: 'mdi:transmission-tower' },
     { key: 'mains_frequency', name: 'Mains Frequency', jsonPath: 'mains.frequency_hz', deviceClass: 'frequency', unit: 'Hz', stateClass: 'measurement', icon: 'mdi:waveform' },
 
-    // Counters / diagnostics
-    { key: 'run_hours', name: 'Generator Run Hours', jsonPath: 'run_hours', unit: 'h', stateClass: 'total_increasing', entityCategory: 'diagnostic', icon: 'mdi:timer-outline' },
+    // Counters
+    { key: 'run_hours', name: 'Generator Run Hours', jsonPath: 'run_hours', unit: 'h', stateClass: 'total_increasing', icon: 'mdi:timer-outline' },
+    { key: 'energy_kwh', name: 'Energy Produced', jsonPath: 'energy_kwh', deviceClass: 'energy', unit: 'kWh', stateClass: 'total_increasing', icon: 'mdi:lightning-bolt' },
 
-    // MUST be non-negative for HA energy device_class
-    { key: 'energy_kwh', name: 'Generator Energy', jsonPath: 'energy_kwh', deviceClass: 'energy', unit: 'kWh', stateClass: 'total_increasing', entityCategory: 'diagnostic', icon: 'mdi:counter' },
+    // Alarms (primary)
+    { key: 'active_alarms_text', name: 'Active Alarms', jsonPath: 'alarms.active_text', icon: 'mdi:alarm-light' },
 
-    // Signed energy (negative) as diagnostic only
-    { key: 'energy_signed_kwh', name: 'Generator Energy (Signed)', jsonPath: 'energy_signed_kwh', unit: 'kWh', entityCategory: 'diagnostic', icon: 'mdi:swap-horizontal' },
+    // Battery/supply
+    { key: 'usupply_v', name: 'Battery Voltage', jsonPath: 'usupply_v', deviceClass: 'voltage', unit: 'V', stateClass: 'measurement', icon: 'mdi:car-battery' },
 
-    // Alarms
+    // Alarms (diagnostic)
     { key: 'alarm_count', name: 'Alarms Total', jsonPath: 'alarms.count', stateClass: 'measurement', entityCategory: 'diagnostic', icon: 'mdi:counter' },
     { key: 'alarm_unacknowledged', name: 'Alarms Unacknowledged', jsonPath: 'alarms.unacknowledged', stateClass: 'measurement', entityCategory: 'diagnostic', icon: 'mdi:alert-circle' },
     { key: 'alarm_ack_active', name: 'Alarms Acknowledged Active', jsonPath: 'alarms.ack_active', stateClass: 'measurement', entityCategory: 'diagnostic', icon: 'mdi:alert-circle-check' },
-    { key: 'active_alarms_text', name: 'Active Alarms', jsonPath: 'alarms.active_text', entityCategory: 'diagnostic', icon: 'mdi:alarm-light' },
+
+    // Energy/counters (diagnostic)
+    { key: 'energy_signed_kwh', name: 'Energy Produced (Signed)', jsonPath: 'energy_signed_kwh', unit: 'kWh', entityCategory: 'diagnostic', icon: 'mdi:swap-horizontal' },
+    { key: 'gen_breaker_ops', name: 'Generator Breaker Operations', jsonPath: 'counters.gen_breaker_ops', stateClass: 'total_increasing', entityCategory: 'diagnostic', icon: 'mdi:electric-switch' },
+    { key: 'mains_breaker_ops', name: 'Mains Breaker Operations', jsonPath: 'counters.mains_breaker_ops', stateClass: 'total_increasing', entityCategory: 'diagnostic', icon: 'mdi:electric-switch' },
+    { key: 'start_attempts', name: 'Start Attempts', jsonPath: 'counters.start_attempts', stateClass: 'total_increasing', entityCategory: 'diagnostic', icon: 'mdi:restart' },
 
     // Alarm bitfields (raw hex)
     { key: 'alarm_bitfield_1000', name: 'Alarm Bitfield 1000', valueTemplate: "{{ value_json.alarms.bitfield['1000'] | is_defined }}", entityCategory: 'diagnostic', icon: 'mdi:code-brackets' },
@@ -405,26 +478,121 @@ function publishHassDiscovery(mq) {
     { key: 'alarm_bitfield_1014', name: 'Alarm Bitfield 1014', valueTemplate: "{{ value_json.alarms.bitfield['1014'] | is_defined }}", entityCategory: 'diagnostic', icon: 'mdi:code-brackets' },
     { key: 'alarm_bitfield_1015', name: 'Alarm Bitfield 1015', valueTemplate: "{{ value_json.alarms.bitfield['1015'] | is_defined }}", entityCategory: 'diagnostic', icon: 'mdi:code-brackets' },
 
-    // Counters / operations
-    { key: 'gen_breaker_ops', name: 'Generator Breaker Operations', jsonPath: 'counters.gen_breaker_ops', stateClass: 'total_increasing', entityCategory: 'diagnostic', icon: 'mdi:electric-switch' },
-    { key: 'mains_breaker_ops', name: 'Mains Breaker Operations', jsonPath: 'counters.mains_breaker_ops', stateClass: 'total_increasing', entityCategory: 'diagnostic', icon: 'mdi:electric-switch' },
-    { key: 'start_attempts', name: 'Start Attempts', jsonPath: 'counters.start_attempts', stateClass: 'total_increasing', entityCategory: 'diagnostic', icon: 'mdi:restart' },
-
+    // Technical (diagnostic)
     { key: 'rpm', name: 'Engine RPM', jsonPath: 'rpm', unit: 'RPM', stateClass: 'measurement', entityCategory: 'diagnostic', icon: 'mdi:engine' },
-    { key: 'usupply_v', name: 'Battery Voltage', jsonPath: 'usupply_v', deviceClass: 'voltage', unit: 'V', stateClass: 'measurement', entityCategory: 'diagnostic', icon: 'mdi:car-battery' },
+    
+    // Operating mode (primary status)
+    { key: 'operating_mode', name: 'Operating Mode', jsonPath: 'status.operating_mode', icon: 'mdi:state-machine' },
   ];
 
   for (const s of sensors) pubSensor(s.key, s);
 
   // Binary sensors
   const binarySensors = [
+    // Critical alerts (primary)
     { 
       key: 'has_unack_alarms', 
       name: 'Unacknowledged Alarms Active', 
       valueTemplate: '{{ "ON" if value_json.alarms.unacknowledged > 0 else "OFF" }}',
       deviceClass: 'problem',
-      entityCategory: 'diagnostic',
       icon: 'mdi:alert'
+    },
+    // Status binary sensors (primary)
+    {
+      key: 'status_mains_failure',
+      name: 'Mains Failure',
+      valueTemplate: '{{ "ON" if value_json.status["1018_0"] else "OFF" }}',
+      deviceClass: 'problem',
+      icon: 'mdi:transmission-tower-off'
+    },
+    {
+      key: 'status_mb_on',
+      name: 'Mains Breaker ON',
+      valueTemplate: '{{ "ON" if value_json.status["1018_1"] else "OFF" }}',
+      icon: 'mdi:electric-switch'
+    },
+    {
+      key: 'status_gb_on',
+      name: 'Generator Breaker ON',
+      valueTemplate: '{{ "ON" if value_json.status["1018_4"] else "OFF" }}',
+      icon: 'mdi:electric-switch'
+    },
+    {
+      key: 'status_engine_running',
+      name: 'Engine Running',
+      valueTemplate: '{{ "ON" if value_json.status["1018_6"] else "OFF" }}',
+      deviceClass: 'running',
+      icon: 'mdi:engine'
+    },
+    {
+      key: 'status_gen_ok',
+      name: 'Generator Hz/V OK',
+      valueTemplate: '{{ "ON" if value_json.status["1018_8"] else "OFF" }}',
+      icon: 'mdi:check-circle'
+    },
+    // Operating mode status (diagnostic)
+    {
+      key: 'status_running_timer',
+      name: 'Running Detection Timer Expired',
+      valueTemplate: '{{ "ON" if value_json.status["1018_7"] else "OFF" }}',
+      entityCategory: 'diagnostic',
+      icon: 'mdi:timer-check'
+    },
+    {
+      key: 'mode_off',
+      name: 'Mode: OFF',
+      valueTemplate: '{{ "ON" if value_json.status["1019_0"] else "OFF" }}',
+      entityCategory: 'diagnostic',
+      icon: 'mdi:power-off'
+    },
+    {
+      key: 'mode_manual',
+      name: 'Mode: Manual',
+      valueTemplate: '{{ "ON" if value_json.status["1019_1"] else "OFF" }}',
+      entityCategory: 'diagnostic',
+      icon: 'mdi:hand-back-right'
+    },
+    {
+      key: 'mode_auto',
+      name: 'Mode: Auto',
+      valueTemplate: '{{ "ON" if value_json.status["1019_3"] else "OFF" }}',
+      entityCategory: 'diagnostic',
+      icon: 'mdi:autorenew'
+    },
+    {
+      key: 'mode_test',
+      name: 'Mode: Test',
+      valueTemplate: '{{ "ON" if value_json.status["1019_4"] else "OFF" }}',
+      entityCategory: 'diagnostic',
+      icon: 'mdi:test-tube'
+    },
+    {
+      key: 'mode_island',
+      name: 'Mode: Island',
+      valueTemplate: '{{ "ON" if value_json.status["1019_5"] else "OFF" }}',
+      entityCategory: 'diagnostic',
+      icon: 'mdi:island'
+    },
+    {
+      key: 'mode_amf',
+      name: 'Mode: AMF',
+      valueTemplate: '{{ "ON" if value_json.status["1019_6"] else "OFF" }}',
+      entityCategory: 'diagnostic',
+      icon: 'mdi:auto-mode'
+    },
+    {
+      key: 'load_takeover',
+      name: 'Load Take Over',
+      valueTemplate: '{{ "ON" if value_json.status["1019_10"] else "OFF" }}',
+      entityCategory: 'diagnostic',
+      icon: 'mdi:transfer'
+    },
+    {
+      key: 'amf_active',
+      name: 'AMF Active',
+      valueTemplate: '{{ "ON" if value_json.status["1019_15"] else "OFF" }}',
+      entityCategory: 'diagnostic',
+      icon: 'mdi:lightning-bolt'
     },
   ];
 
@@ -471,7 +639,7 @@ function publishHassDiscovery(mq) {
     // Read measurement table block 500..576
     const b = await readInputBlock(mb, MEAS_START, MEAS_COUNT);
 
-    // Read alarm bitfield registers 1000..1015
+    // Read alarm bitfield registers 1000..1019 (includes status at 1018-1019)
     const alarmRegs = await readInputBlock(mb, ALARM_START, ALARM_COUNT);
 
     const appRaw = getReg(b, R.APP_VERSION);
@@ -522,6 +690,10 @@ function publishHassDiscovery(mq) {
     alarms.active = decodeAlarms(alarmRegs);
     alarms.active_text = formatActiveAlarms(alarms.active);
 
+    // Decode status bits from registers 1018-1019
+    const status = decodeStatus(alarmRegs);
+    status.operating_mode = getOperatingModeText(status);
+
     const counters = {
       gen_breaker_ops: getReg(b, R.GB_OPERATIONS),
       mains_breaker_ops: getReg(b, R.MB_OPERATIONS),
@@ -546,6 +718,7 @@ function publishHassDiscovery(mq) {
       energy_signed_kwh: energySignedKwh,
       alarms,
       counters,
+      status,
       rpm,
       usupply_v: usupplyV,
       ts: new Date().toISOString(),
