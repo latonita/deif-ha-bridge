@@ -100,7 +100,7 @@ const ALARM_END = 1019;
 const ALARM_COUNT = (ALARM_END - ALARM_START) + 1;
 
 // Alarm descriptions: key format is "register:bit"
-const ALARM_AND_STATUS_MAP = {
+const ALARM_MAP = {
   // 1000 Protection alarms
   '1000:0':  { code: '1000', text: 'G -P> 1' },
   '1000:3':  { code: '1030', text: 'G I> 1' },
@@ -144,14 +144,6 @@ const ALARM_AND_STATUS_MAP = {
   '1005:8':  { code: '2210', text: 'MB close failure' },
   '1005:9':  { code: 'no code', text: 'MB pos failure' },
 
-  // 1007 Digital inputs
-  '1007:0':  { code: '3000', text: 'Dig. input 1' },
-  '1007:1':  { code: '3010', text: 'Dig. input 2' },
-  '1007:2':  { code: '3020', text: 'Dig. input 3' },
-  '1007:3':  { code: '3030', text: 'Dig. input 4' },
-  '1007:4':  { code: '3040', text: 'Dig. input 5' },
-  '1007:5':  { code: '3050', text: 'Dig. input 6' },
-
   // 1010 Protection alarms (multi-inputs)
   '1010:0':  { code: '3400', text: 'Dig. multi-input 1' },
   '1010:1':  { code: '3410', text: 'Dig. multi-input 2' },
@@ -189,17 +181,9 @@ const ALARM_AND_STATUS_MAP = {
   '1015:0':  { code: '6110', text: 'Service timer 1' },
   '1015:1':  { code: '6120', text: 'Service timer 2' },
   '1015:13': { code: 'no code', text: 'Fuel fill check' },
+};
 
-  // 1016 Relay outputs
-  '1016:0':  { code: '5000', text: 'Relay 21' },
-  '1016:1':  { code: '5010', text: 'Relay 22' },
-  '1016:2':  { code: '5020', text: 'Relay 23' },
-  '1016:3':  { code: '5030', text: 'Relay 24' },
-  '1016:4':  { code: '5040', text: 'Relay 26' },
-  '1016:5':  { code: 'no code', text: 'GB On' },
-  '1016:6':  { code: 'no code', text: 'MB On' },
-  '1016:11': { code: '5110', text: 'Relay 3' },
-
+const STATUS_MAP = {
   // 1018 Status
   '1018:0':  { code: 'no code', text: 'Mains failure' },
   '1018:1':  { code: 'no code', text: 'MB pos ON' },
@@ -218,6 +202,15 @@ const ALARM_AND_STATUS_MAP = {
   '1019:10': { code: 'no code', text: 'Load take over' },
   '1019:15': { code: 'no code', text: 'AMF active' }
 };
+
+const ALARM_REGISTERS = Array.from(new Set(Object.keys(ALARM_MAP)
+  .map(k => parseInt(k.split(':')[0], 10)))).sort((a, b) => a - b);
+const ALARM_REG_SET = new Set(ALARM_REGISTERS);
+
+const STATUS_REGISTERS = Array.from(new Set(Object.keys(STATUS_MAP)
+  .map(k => parseInt(k.split(':')[0], 10)))).sort((a, b) => a - b);
+
+const BIT_MASKS = Array.from({ length: 16 }, (_, bit) => 1 << bit);
 
 
 /* =========================
@@ -252,20 +245,16 @@ function decodeAlarms(alarmRegs) {
   const active = [];
   for (let i = 0; i < alarmRegs.length; i++) {
     const regAddr = ALARM_START + i;
-    
-    // Only process specific alarm registers: 1000-1005, 1010, 1011, 1013, 1014, 1015
-    const isAlarmReg = (regAddr >= 1000 && regAddr <= 1005) ||
-                       regAddr === 1010 || regAddr === 1011 ||
-                       regAddr === 1013 || regAddr === 1014 || regAddr === 1015;
-    if (!isAlarmReg) continue;
-    
+
+    if (!ALARM_REG_SET.has(regAddr)) continue;
+
     const regValue = alarmRegs[i];
-    
+
     // Check each bit in the register
-    for (let bit = 0; bit < 16; bit++) {
-      if (regValue & (1 << bit)) {
+    for (let bit = 0; bit < BIT_MASKS.length; bit++) {
+      if (regValue & BIT_MASKS[bit]) {
         const key = `${regAddr}:${bit}`;
-        const alarm = ALARM_AND_STATUS_MAP[key];
+        const alarm = ALARM_MAP[key];
         if (alarm) {
           active.push({
             register: regAddr,
@@ -289,20 +278,19 @@ function formatActiveAlarms(activeAlarms) {
 
 function decodeStatus(alarmRegs) {
   const status = {};
-  const statusRegs = [1018, 1019];
-  
-  for (const regAddr of statusRegs) {
+
+  for (const regAddr of STATUS_REGISTERS) {
     const regIdx = regAddr - ALARM_START;
     if (regIdx < 0 || regIdx >= alarmRegs.length) continue;
-    
+
     const regValue = alarmRegs[regIdx];
-    
+
     // Check each bit in the register
-    for (let bit = 0; bit < 16; bit++) {
+    for (let bit = 0; bit < BIT_MASKS.length; bit++) {
       const key = `${regAddr}:${bit}`;
-      const statusDef = ALARM_AND_STATUS_MAP[key];
+      const statusDef = STATUS_MAP[key];
       if (statusDef) {
-        const isActive = !!(regValue & (1 << bit));
+        const isActive = !!(regValue & BIT_MASKS[bit]);
         const statusKey = key.replace(':', '_');
         status[statusKey] = isActive;
       }
@@ -353,6 +341,52 @@ function getReg(block, addr) {
   const idx = addr - MEAS_START;
   if (idx < 0 || idx >= block.length) return undefined;
   return block[idx];
+}
+
+function readGen(block) {
+  return {
+    voltage_l1n_v: getReg(block, R.GEN_U_L1N),
+    voltage_l2n_v: getReg(block, R.GEN_U_L2N),
+    voltage_l3n_v: getReg(block, R.GEN_U_L3N),
+    current_l1_a: getReg(block, R.GEN_I_L1),
+    current_l2_a: getReg(block, R.GEN_I_L2),
+    current_l3_a: getReg(block, R.GEN_I_L3),
+    frequency_hz: freqFloat(getReg(block, R.GEN_F) / FREQ_DIVISOR),
+    pgen_kw: s16(getReg(block, R.PGEN)),
+    qgen_kvar: s16(getReg(block, R.QGEN)),
+    sgen_kva: s16(getReg(block, R.SGEN)),
+    cos_phi: s16(getReg(block, R.COS_PHI)) / 100.0,
+  };
+}
+
+function readMains(block) {
+  return {
+    voltage_l1n_v: getReg(block, R.MAINS_U_L1N),
+    voltage_l2n_v: getReg(block, R.MAINS_U_L2N),
+    voltage_l3n_v: getReg(block, R.MAINS_U_L3N),
+    frequency_hz: freqFloat(getReg(block, R.MAINS_F) / FREQ_DIVISOR),
+  };
+}
+
+function readRunHours(block) {
+  return u32(getReg(block, R.RUN_HI), getReg(block, R.RUN_LO));
+}
+
+function readEnergy(block) {
+  const energyKwh = u32(getReg(block, R.EGEN_HI), getReg(block, R.EGEN_LO));
+  return { energyKwh, energySignedKwh: -energyKwh };
+}
+
+function readCounters(block) {
+  return {
+    gen_breaker_ops: getReg(block, R.GB_OPERATIONS),
+    mains_breaker_ops: getReg(block, R.MB_OPERATIONS),
+    start_attempts: getReg(block, R.START_ATTEMPTS),
+  };
+}
+
+function readUsupply(block) {
+  return Number.parseFloat((getReg(block, R.USUPPLY) / 10.0).toFixed(1));
 }
 
 /* =========================
@@ -645,32 +679,12 @@ function publishHassDiscovery(mq) {
     const appRaw = getReg(b, R.APP_VERSION);
     const appVersion = fmtAppVersion(appRaw);
 
-    const gen = {
-      voltage_l1n_v: getReg(b, R.GEN_U_L1N),                 // int
-      voltage_l2n_v: getReg(b, R.GEN_U_L2N),                 // int
-      voltage_l3n_v: getReg(b, R.GEN_U_L3N),                 // int
-      current_l1_a: getReg(b, R.GEN_I_L1),                   // int
-      current_l2_a: getReg(b, R.GEN_I_L2),                   // int
-      current_l3_a: getReg(b, R.GEN_I_L3),                   // int
-      frequency_hz: freqFloat(getReg(b, R.GEN_F) / FREQ_DIVISOR), // decimal
-      pgen_kw: s16(getReg(b, R.PGEN)),                       // signed per manual
-      qgen_kvar: s16(getReg(b, R.QGEN)),                     // keep signed to be safe
-      sgen_kva: s16(getReg(b, R.SGEN)),                      // keep signed to be safe
-      cos_phi: s16(getReg(b, R.COS_PHI)) / 100.0,            // signed, cosf x100
-    };
-
-    const mains = {
-      voltage_l1n_v: getReg(b, R.MAINS_U_L1N),               // int
-      voltage_l2n_v: getReg(b, R.MAINS_U_L2N),               // int
-      voltage_l3n_v: getReg(b, R.MAINS_U_L3N),               // int
-      frequency_hz: freqFloat(getReg(b, R.MAINS_F) / FREQ_DIVISOR), // decimal
-    };
-
-    const runHours = u32(getReg(b, R.RUN_HI), getReg(b, R.RUN_LO));
+    const gen = readGen(b);
+    const mains = readMains(b);
+    const runHours = readRunHours(b);
 
     // Energy counter (must be non-negative for HA energy sensor)
-    const energyKwh = u32(getReg(b, R.EGEN_HI), getReg(b, R.EGEN_LO));
-    const energySignedKwh = -energyKwh;
+    const { energyKwh, energySignedKwh } = readEnergy(b);
 
     const alarms = {
       count: getReg(b, R.ALARM_COUNT),
@@ -694,14 +708,10 @@ function publishHassDiscovery(mq) {
     const status = decodeStatus(alarmRegs);
     status.operating_mode = getOperatingModeText(status);
 
-    const counters = {
-      gen_breaker_ops: getReg(b, R.GB_OPERATIONS),
-      mains_breaker_ops: getReg(b, R.MB_OPERATIONS),
-      start_attempts: getReg(b, R.START_ATTEMPTS),
-    };
+    const counters = readCounters(b);
 
     const rpm = getReg(b, R.RPM);
-    const usupplyV = Number.parseFloat((getReg(b, R.USUPPLY) / 10.0).toFixed(1));
+    const usupplyV = readUsupply(b);
 
     publish(mq, 'state', {
       device: {
