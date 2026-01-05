@@ -20,6 +20,7 @@ const MQTT_PASS = process.env.MQTT_PASS || '';
 const TOPIC_PREFIX = (process.env.TOPIC_PREFIX || 'deif/gc1f2').replace(/\/+$/, '');
 const INTERVAL_MS = parseInt(process.env.INTERVAL_MS || '5000', 10);
 const RETAIN = (process.env.RETAIN || 'true').toLowerCase() === 'true';
+const PUBLISH_INDIVIDUAL = (process.env.PUBLISH_INDIVIDUAL_TOPICS || 'true').toLowerCase() === 'true';
 
 // Static device metadata
 const DEVICE_MODEL = process.env.DEVICE_MODEL || 'DEIF GC-1F/2';
@@ -330,6 +331,20 @@ function publish(mq, key, value, retainOverride) {
   const retain = (typeof retainOverride === 'boolean') ? retainOverride : RETAIN;
   const payload = (typeof value === 'object') ? JSON.stringify(value) : String(value);
   mq.publish(topic, payload, { qos: 0, retain });
+}
+
+function publishFlat(mq, prefixKey, obj, retainOverride) {
+  const stack = [{ path: prefixKey, value: obj }];
+  while (stack.length) {
+    const { path, value } = stack.pop();
+    if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+      for (const [k, v] of Object.entries(value)) {
+        stack.push({ path: `${path}/${k}`, value: v });
+      }
+    } else {
+      publish(mq, path, value, retainOverride);
+    }
+  }
 }
 
 async function readInputBlock(mb, start, count) {
@@ -733,6 +748,26 @@ function publishHassDiscovery(mq) {
       usupply_v: usupplyV,
       ts: new Date().toISOString(),
     });
+
+    if (PUBLISH_INDIVIDUAL) {
+      publishFlat(mq, 'device', {
+        id: HASS_DEVICE_ID,
+        name: DEVICE_NAME,
+        manufacturer: DEVICE_MANUFACTURER,
+        model: DEVICE_MODEL,
+      }, true);
+      publishFlat(mq, 'gen', gen, RETAIN);
+      publishFlat(mq, 'mains', mains, RETAIN);
+      publish(mq, 'run_hours', runHours, RETAIN);
+      publish(mq, 'energy_kwh', energyKwh, RETAIN);
+      publish(mq, 'energy_signed_kwh', energySignedKwh, RETAIN);
+      publishFlat(mq, 'alarms', alarms, RETAIN);
+      publishFlat(mq, 'counters', counters, RETAIN);
+      publishFlat(mq, 'status', status, RETAIN);
+      publish(mq, 'rpm', rpm, RETAIN);
+      publish(mq, 'usupply_v', usupplyV, RETAIN);
+      publish(mq, 'ts', new Date().toISOString(), RETAIN);
+    }
   }
 
   const run = async () => {

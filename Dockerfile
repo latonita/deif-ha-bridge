@@ -1,4 +1,4 @@
-FROM node:20-bookworm-slim
+FROM node:20-bookworm-slim AS builder
 
 # Native build deps for serialport/modbus-serial
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -9,13 +9,28 @@ WORKDIR /app
 
 # Install deps first for better caching
 COPY package.json package-lock.json* ./
-RUN npm ci --omit=dev || npm install --omit=dev
+RUN npm ci --omit=dev && npm cache clean --force
 
-# Copy app
+# Copy app (no need for other files in final image)
 COPY deif_to_mqtt.js ./
 
-# Non-root user (recommended)
-RUN useradd -m -u 10001 appuser
-USER appuser
+# Prepare minimal passwd/group with dialout for serial devices
+RUN set -eux; \
+  cp /etc/passwd /tmp/passwd; \
+  cp /etc/group /tmp/group; \
+  echo 'nonroot:x:65532:65532:nonroot:/home/nonroot:/sbin/nologin' >> /tmp/passwd; \
+  echo 'nonroot:x:65532:' >> /tmp/group; \
+  echo 'dialout:x:20:nonroot' >> /tmp/group
 
-CMD ["node", "deif_to_mqtt.js"]
+FROM gcr.io/distroless/nodejs20-debian12:nonroot
+ENV NODE_ENV=production
+WORKDIR /app
+
+# Copy runtime artifacts only
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/package.json ./package.json
+COPY --from=builder /app/deif_to_mqtt.js ./deif_to_mqtt.js
+COPY --from=builder /tmp/passwd /etc/passwd
+COPY --from=builder /tmp/group /etc/group
+
+CMD ["deif_to_mqtt.js"]

@@ -263,3 +263,9 @@ Set `INTERVAL_MS=0` to run once and exit (useful for testing without loops)
 - Application version from controller is auto-formatted for display
 - Energy counter must be unsigned for Home Assistant energy dashboard
 - Signed energy value preserved in `energy_signed_kwh` for reference
+- `PUBLISH_INDIVIDUAL_TOPICS` controls per-metric MQTT publishing (default true). Set to false to publish only the consolidated `state` message.
+
+## Container Image Notes
+
+- Dockerfile uses a multi-stage build with a distroless runtime to minimize size.
+- Builder stage keeps native toolchain; runtime stage includes only app, deps, and minimal passwd/group with `dialout` for serial access.
