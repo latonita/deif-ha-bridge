@@ -14,6 +14,14 @@ Bridge the DEIF GC-1F/2 generator controller (Modbus RTU) to MQTT for automatic 
 - MQTT broker reachable from the container/host.
 - Node.js 20+ if running locally (Docker image includes runtime).
 
+## Commands (optional, gated)
+- Disabled by default. Set `ENABLE_COMMANDS=true` to expose command topics and Home Assistant buttons for:
+  - Alarm acknowledge → `<TOPIC_PREFIX>/cmd/alarm_ack`
+  - Mode Manual → `<TOPIC_PREFIX>/cmd/mode_manual`
+  - Mode Auto → `<TOPIC_PREFIX>/cmd/mode_auto`
+- Global cooldown between any commands via `CMD_COOLDOWN_MS` (default 5000ms).
+- Retained command messages are ignored. Secure your MQTT broker/ACLs so only trusted clients can publish to `.../cmd/#`.
+
 ## Configuration
 Set environment variables (example `.env`):
 ```
