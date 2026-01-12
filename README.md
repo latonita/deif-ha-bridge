@@ -4,11 +4,12 @@ Bridge the DEIF GC-1F/2 generator controller (Modbus RTU) to MQTT so Home Assist
 
 ## Features
 - Fresh data every few seconds: power, energy, run hours, alarms, status, and more.
-- One tidy JSON payload at `TOPIC_PREFIX/state`, plus optional per-metric topics when you want to dig in.
+- Per-metric topics only (no consolidated state payload).
 - Home Assistant auto-discovery for 50+ sensors/binary sensors (retained for restart resilience).
 - Clear alarm handling: separates alarms from status bits and prints active alarms in plain text.
 - Optional control buttons for alarm acknowledge, start/stop/breakers, and Manual/Auto/Test modes, guarded by a global cooldown and safe handling of retained MQTT messages.
 - Built for small, secure deployments (distroless image, dialout-ready for serial devices).
+- Tracks and retains engine last-run timestamps and last run duration when start/stop status changes.
 
 ## Requirements
 - DEIF GC-1F/2 controller on RS-485.
@@ -19,7 +20,7 @@ Bridge the DEIF GC-1F/2 generator controller (Modbus RTU) to MQTT so Home Assist
 1) Clone: `git clone https://github.com/latonita/deif-ha-bridge.git && cd deif-ha-bridge`
 2) Configure: create `.env` using the variables below.
 3) Run:
-   - Docker Compose: `docker compose up --build`
+   - Docker Compose: `docker compose up --build -d`
    - Docker: `docker build -t deif-ha-bridge .` then `docker run --rm --device /dev/ttyUSB0:/dev/ttyUSB0 --group-add dialout --env-file .env deif-ha-bridge`
    - Local: `npm ci --omit=dev && node deif_to_mqtt.js`
 
@@ -52,6 +53,7 @@ TOPIC_PREFIX=deif/gc1f2
 INTERVAL_MS=5000
 RETAIN=true
 PUBLISH_INDIVIDUAL_TOPICS=true
+PUBLISH_ALARM_BITFIELDS=false
 ENABLE_COMMAND_ALARM_ACK=false
 ENABLE_COMMAND_START=false
 ENABLE_COMMAND_GB_ON=false
@@ -72,7 +74,7 @@ Key notes:
 - Frequency divisor/decimals can be tuned via `FREQ_DIVISOR` and `FREQ_DECIMALS` if your device scales differently.
 - `INTERVAL_MS=0` runs once and exits (useful for tests).
 - Status registers 1018-1019 are published under `status.*`, not treated as alarms.
-- Set `PUBLISH_INDIVIDUAL_TOPICS=false` to skip per-metric topics and publish only the consolidated `state` payload.
+- Discovery templates point to per-metric topics; no consolidated `state` payload is published (per-metric topics are always on).
 
 ## Run with Docker Compose
 ```
@@ -103,6 +105,7 @@ Ensure your user has permission to `/dev/ttyUSB0` (often by being in the `dialou
 
 ## Home Assistant
 - Discovery messages are retained; entities appear automatically under the configured `HASS_DISCOVERY_PREFIX`.
+- Alarm bitfields are only published (and discovered) when `PUBLISH_ALARM_BITFIELDS=true`.
 - Numeric keys in JSON require bracket notation in templates: `{{ value_json.alarms.bitfield['1000'] }}`.
 
 ## Troubleshooting

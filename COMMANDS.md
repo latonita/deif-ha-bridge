@@ -26,7 +26,7 @@ This project polls Modbus input registers from the DEIF GC-1F/2 controller and p
 | 1000-1005, 1010-1011, 1013-1015 | Alarm bitfields; decoded to human-readable alarms | `alarms.bitfield['<reg>']` (hex), `alarms.active`, `alarms.active_text` |
 | 1018-1019 | Status bitfields (operating mode, mains failure, breaker/engine state) | `status['1018_#']`, `status['1019_#']`, `status.operating_mode` |
 
-All polled data is published to `TOPIC_PREFIX/state` as a single JSON. When `PUBLISH_INDIVIDUAL_TOPICS=true`, each leaf field is also published under `TOPIC_PREFIX/<path>` (e.g., `deif/gc1f2/gen/voltage_l1n_v`).
+All polled data is published under per-metric topics (e.g., `deif/gc1f2/gen/voltage_l1n_v`). No consolidated `state` payload is published. Alarm bitfields are only included in HA discovery when `PUBLISH_ALARM_BITFIELDS=true`.
 
 ## Reference
 

@@ -20,7 +20,6 @@ const MQTT_PASS = process.env.MQTT_PASS || '';
 const TOPIC_PREFIX = (process.env.TOPIC_PREFIX || 'deif/gc1f2').replace(/\/+$/, '');
 const INTERVAL_MS = parseInt(process.env.INTERVAL_MS || '5000', 10);
 const RETAIN = (process.env.RETAIN || 'true').toLowerCase() === 'true';
-const PUBLISH_INDIVIDUAL = (process.env.PUBLISH_INDIVIDUAL_TOPICS || 'true').toLowerCase() === 'true';
 const CMD_COOLDOWN_MS = parseInt(process.env.CMD_COOLDOWN_MS || '5000', 10);
 
 // Static device metadata
@@ -49,6 +48,16 @@ const ENABLE_COMMAND_GB_OFF_STOP = envFlag('ENABLE_COMMAND_GB_OFF_STOP');
 const ENABLE_COMMAND_MB_ON = envFlag('ENABLE_COMMAND_MB_ON');
 const ENABLE_COMMAND_MB_OFF = envFlag('ENABLE_COMMAND_MB_OFF');
 const ENABLE_COMMAND_TEST = envFlag('ENABLE_COMMAND_TEST');
+const PUBLISH_ALARM_BITFIELDS = envFlag('PUBLISH_ALARM_BITFIELDS');
+
+function describeAlarmKey(key) {
+  const [regStr, bitStr] = key.split(':');
+  const def = ALARM_MAP[key];
+  if (def) {
+    return `${regStr}:${bitStr} (${def.code} ${def.text})`;
+  }
+  return `${regStr}:${bitStr}`;
+}
 
 // Manual says Hz/100, but your device shows 500 for 50.0 Hz -> divisor 10.
 // Keep configurable.
@@ -420,8 +429,13 @@ function createCommandHandler(mb, commands) {
     try {
       const cmd = commandByTopic.get(topic);
       if (!cmd) return;
-      if (!withinCooldown()) return;
+      console.log(`Command received: ${cmd.key} (topic=${topic}, offset=${cmd.offset})`);
+      if (!withinCooldown()) {
+        console.log('Command skipped (cooldown active)');
+        return;
+      }
       await writeCommandFlag(mb, cmd.offset);
+      console.log(`Command sent: ${cmd.key}`);
     } catch (err) {
       console.error('Command error', topic, err && err.message ? err.message : err);
     }
@@ -493,18 +507,23 @@ function publishHassDiscovery(mq) {
     model: DEVICE_MODEL,
   };
 
+  function dataTopicFromPath(jsonPath) {
+    return `${TOPIC_PREFIX}/${jsonPath.replace(/\./g, '/')}`;
+  }
+
   function pubSensor(key, cfg) {
     const objectId = `${HASS_NODE_ID}-${key}`;
     const topic = `${HASS_DISCOVERY_PREFIX}/sensor/${HASS_NODE_ID}/${key}/config`;
 
-    // Use custom value template if provided, otherwise build from jsonPath
-    const valueTemplate = cfg.valueTemplate || `{{ value_json.${cfg.jsonPath} | is_defined }}`;
+    const statTopic = dataTopicFromPath(cfg.jsonPath);
+
+    const valueTemplate = '{{ value }}';
 
     const payload = {
       name: cfg.name,
       uniq_id: objectId,
       obj_id: objectId,
-      stat_t: stateTopic,
+      stat_t: statTopic,
       val_tpl: valueTemplate,
       en: true,
       force_update: true,
@@ -523,12 +542,17 @@ function publishHassDiscovery(mq) {
     const objectId = `${HASS_NODE_ID}-${key}`;
     const topic = `${HASS_DISCOVERY_PREFIX}/binary_sensor/${HASS_NODE_ID}/${key}/config`;
 
+    const statTopic = dataTopicFromPath(cfg.jsonPath || '');
+
+    const defaultTemplate = '{{ "ON" if value|string|lower in ["true","on","1"] else "OFF" }}';
+    const valueTemplate = cfg.valueTemplateFlat || defaultTemplate;
+
     const payload = {
       name: cfg.name,
       uniq_id: objectId,
       obj_id: objectId,
-      stat_t: stateTopic,
-      val_tpl: cfg.valueTemplate,
+      stat_t: statTopic,
+      val_tpl: valueTemplate,
       en: true,
       device,
       ...(cfg.icon ? { ic: cfg.icon } : {}),
@@ -604,26 +628,12 @@ function publishHassDiscovery(mq) {
     { key: 'mains_breaker_ops', name: 'Mains Breaker Operations', jsonPath: 'counters.mains_breaker_ops', stateClass: 'total_increasing', entityCategory: 'diagnostic', icon: 'mdi:electric-switch' },
     { key: 'start_attempts', name: 'Start Attempts', jsonPath: 'counters.start_attempts', stateClass: 'total_increasing', entityCategory: 'diagnostic', icon: 'mdi:restart' },
 
-    // Alarm bitfields (raw hex)
-    { key: 'alarm_bitfield_1000', name: 'Alarm Bitfield 1000', valueTemplate: "{{ value_json.alarms.bitfield['1000'] | is_defined }}", entityCategory: 'diagnostic', icon: 'mdi:code-brackets' },
-    { key: 'alarm_bitfield_1001', name: 'Alarm Bitfield 1001', valueTemplate: "{{ value_json.alarms.bitfield['1001'] | is_defined }}", entityCategory: 'diagnostic', icon: 'mdi:code-brackets' },
-    { key: 'alarm_bitfield_1002', name: 'Alarm Bitfield 1002', valueTemplate: "{{ value_json.alarms.bitfield['1002'] | is_defined }}", entityCategory: 'diagnostic', icon: 'mdi:code-brackets' },
-    { key: 'alarm_bitfield_1003', name: 'Alarm Bitfield 1003', valueTemplate: "{{ value_json.alarms.bitfield['1003'] | is_defined }}", entityCategory: 'diagnostic', icon: 'mdi:code-brackets' },
-    { key: 'alarm_bitfield_1004', name: 'Alarm Bitfield 1004', valueTemplate: "{{ value_json.alarms.bitfield['1004'] | is_defined }}", entityCategory: 'diagnostic', icon: 'mdi:code-brackets' },
-    { key: 'alarm_bitfield_1005', name: 'Alarm Bitfield 1005', valueTemplate: "{{ value_json.alarms.bitfield['1005'] | is_defined }}", entityCategory: 'diagnostic', icon: 'mdi:code-brackets' },
-    { key: 'alarm_bitfield_1006', name: 'Alarm Bitfield 1006', valueTemplate: "{{ value_json.alarms.bitfield['1006'] | is_defined }}", entityCategory: 'diagnostic', icon: 'mdi:code-brackets' },
-    { key: 'alarm_bitfield_1007', name: 'Alarm Bitfield 1007', valueTemplate: "{{ value_json.alarms.bitfield['1007'] | is_defined }}", entityCategory: 'diagnostic', icon: 'mdi:code-brackets' },
-    { key: 'alarm_bitfield_1008', name: 'Alarm Bitfield 1008', valueTemplate: "{{ value_json.alarms.bitfield['1008'] | is_defined }}", entityCategory: 'diagnostic', icon: 'mdi:code-brackets' },
-    { key: 'alarm_bitfield_1009', name: 'Alarm Bitfield 1009', valueTemplate: "{{ value_json.alarms.bitfield['1009'] | is_defined }}", entityCategory: 'diagnostic', icon: 'mdi:code-brackets' },
-    { key: 'alarm_bitfield_1010', name: 'Alarm Bitfield 1010', valueTemplate: "{{ value_json.alarms.bitfield['1010'] | is_defined }}", entityCategory: 'diagnostic', icon: 'mdi:code-brackets' },
-    { key: 'alarm_bitfield_1011', name: 'Alarm Bitfield 1011', valueTemplate: "{{ value_json.alarms.bitfield['1011'] | is_defined }}", entityCategory: 'diagnostic', icon: 'mdi:code-brackets' },
-    { key: 'alarm_bitfield_1012', name: 'Alarm Bitfield 1012', valueTemplate: "{{ value_json.alarms.bitfield['1012'] | is_defined }}", entityCategory: 'diagnostic', icon: 'mdi:code-brackets' },
-    { key: 'alarm_bitfield_1013', name: 'Alarm Bitfield 1013', valueTemplate: "{{ value_json.alarms.bitfield['1013'] | is_defined }}", entityCategory: 'diagnostic', icon: 'mdi:code-brackets' },
-    { key: 'alarm_bitfield_1014', name: 'Alarm Bitfield 1014', valueTemplate: "{{ value_json.alarms.bitfield['1014'] | is_defined }}", entityCategory: 'diagnostic', icon: 'mdi:code-brackets' },
-    { key: 'alarm_bitfield_1015', name: 'Alarm Bitfield 1015', valueTemplate: "{{ value_json.alarms.bitfield['1015'] | is_defined }}", entityCategory: 'diagnostic', icon: 'mdi:code-brackets' },
 
     // Technical (diagnostic)
     { key: 'rpm', name: 'Engine RPM', jsonPath: 'rpm', unit: 'RPM', stateClass: 'measurement', entityCategory: 'diagnostic', icon: 'mdi:engine' },
+    { key: 'last_run_started', name: 'Last Run Started', jsonPath: 'last_run_started', deviceClass: 'timestamp', entityCategory: 'diagnostic', icon: 'mdi:clock-start' },
+    { key: 'last_run_stopped', name: 'Last Run Stopped', jsonPath: 'last_run_stopped', deviceClass: 'timestamp', entityCategory: 'diagnostic', icon: 'mdi:clock-end' },
+    { key: 'last_run_duration_s', name: 'Last Run Duration', jsonPath: 'last_run_duration_s', unit: 's', stateClass: 'measurement', entityCategory: 'diagnostic', icon: 'mdi:timer-outline' },
     
     // Operating mode (primary status)
     { key: 'operating_mode', name: 'Operating Mode', jsonPath: 'status.operating_mode', icon: 'mdi:state-machine' },
@@ -631,13 +641,38 @@ function publishHassDiscovery(mq) {
 
   for (const s of sensors) pubSensor(s.key, s);
 
+  if (PUBLISH_ALARM_BITFIELDS) {
+    const bitfieldSensors = [
+      { key: 'alarm_bitfield_1000', name: 'Alarm Bitfield 1000', valueTemplate: "{{ value_json.alarms.bitfield['1000'] | is_defined }}", entityCategory: 'diagnostic', icon: 'mdi:code-brackets' },
+      { key: 'alarm_bitfield_1001', name: 'Alarm Bitfield 1001', valueTemplate: "{{ value_json.alarms.bitfield['1001'] | is_defined }}", entityCategory: 'diagnostic', icon: 'mdi:code-brackets' },
+      { key: 'alarm_bitfield_1002', name: 'Alarm Bitfield 1002', valueTemplate: "{{ value_json.alarms.bitfield['1002'] | is_defined }}", entityCategory: 'diagnostic', icon: 'mdi:code-brackets' },
+      { key: 'alarm_bitfield_1003', name: 'Alarm Bitfield 1003', valueTemplate: "{{ value_json.alarms.bitfield['1003'] | is_defined }}", entityCategory: 'diagnostic', icon: 'mdi:code-brackets' },
+      { key: 'alarm_bitfield_1004', name: 'Alarm Bitfield 1004', valueTemplate: "{{ value_json.alarms.bitfield['1004'] | is_defined }}", entityCategory: 'diagnostic', icon: 'mdi:code-brackets' },
+      { key: 'alarm_bitfield_1005', name: 'Alarm Bitfield 1005', valueTemplate: "{{ value_json.alarms.bitfield['1005'] | is_defined }}", entityCategory: 'diagnostic', icon: 'mdi:code-brackets' },
+      { key: 'alarm_bitfield_1006', name: 'Alarm Bitfield 1006', valueTemplate: "{{ value_json.alarms.bitfield['1006'] | is_defined }}", entityCategory: 'diagnostic', icon: 'mdi:code-brackets' },
+      { key: 'alarm_bitfield_1007', name: 'Alarm Bitfield 1007', valueTemplate: "{{ value_json.alarms.bitfield['1007'] | is_defined }}", entityCategory: 'diagnostic', icon: 'mdi:code-brackets' },
+      { key: 'alarm_bitfield_1008', name: 'Alarm Bitfield 1008', valueTemplate: "{{ value_json.alarms.bitfield['1008'] | is_defined }}", entityCategory: 'diagnostic', icon: 'mdi:code-brackets' },
+      { key: 'alarm_bitfield_1009', name: 'Alarm Bitfield 1009', valueTemplate: "{{ value_json.alarms.bitfield['1009'] | is_defined }}", entityCategory: 'diagnostic', icon: 'mdi:code-brackets' },
+      { key: 'alarm_bitfield_1010', name: 'Alarm Bitfield 1010', valueTemplate: "{{ value_json.alarms.bitfield['1010'] | is_defined }}", entityCategory: 'diagnostic', icon: 'mdi:code-brackets' },
+      { key: 'alarm_bitfield_1011', name: 'Alarm Bitfield 1011', valueTemplate: "{{ value_json.alarms.bitfield['1011'] | is_defined }}", entityCategory: 'diagnostic', icon: 'mdi:code-brackets' },
+      { key: 'alarm_bitfield_1012', name: 'Alarm Bitfield 1012', valueTemplate: "{{ value_json.alarms.bitfield['1012'] | is_defined }}", entityCategory: 'diagnostic', icon: 'mdi:code-brackets' },
+      { key: 'alarm_bitfield_1013', name: 'Alarm Bitfield 1013', valueTemplate: "{{ value_json.alarms.bitfield['1013'] | is_defined }}", entityCategory: 'diagnostic', icon: 'mdi:code-brackets' },
+      { key: 'alarm_bitfield_1014', name: 'Alarm Bitfield 1014', valueTemplate: "{{ value_json.alarms.bitfield['1014'] | is_defined }}", entityCategory: 'diagnostic', icon: 'mdi:code-brackets' },
+      { key: 'alarm_bitfield_1015', name: 'Alarm Bitfield 1015', valueTemplate: "{{ value_json.alarms.bitfield['1015'] | is_defined }}", entityCategory: 'diagnostic', icon: 'mdi:code-brackets' },
+    ];
+
+    for (const s of bitfieldSensors) pubSensor(s.key, s);
+  }
+
   // Binary sensors
   const binarySensors = [
     // Critical alerts (primary)
     { 
       key: 'has_unack_alarms', 
       name: 'Unacknowledged Alarms Active', 
+      jsonPath: 'alarms.unacknowledged',
       valueTemplate: '{{ "ON" if value_json.alarms.unacknowledged > 0 else "OFF" }}',
+      valueTemplateFlat: '{{ "ON" if (value | int(0)) > 0 else "OFF" }}',
       deviceClass: 'problem',
       icon: 'mdi:alert'
     },
@@ -645,6 +680,7 @@ function publishHassDiscovery(mq) {
     {
       key: 'status_mains_failure',
       name: 'Mains Failure',
+      jsonPath: 'status.1018_0',
       valueTemplate: '{{ "ON" if value_json.status["1018_0"] else "OFF" }}',
       deviceClass: 'problem',
       icon: 'mdi:transmission-tower-off'
@@ -652,18 +688,21 @@ function publishHassDiscovery(mq) {
     {
       key: 'status_mb_on',
       name: 'Mains Breaker ON',
+      jsonPath: 'status.1018_1',
       valueTemplate: '{{ "ON" if value_json.status["1018_1"] else "OFF" }}',
       icon: 'mdi:electric-switch'
     },
     {
       key: 'status_gb_on',
       name: 'Generator Breaker ON',
+      jsonPath: 'status.1018_4',
       valueTemplate: '{{ "ON" if value_json.status["1018_4"] else "OFF" }}',
       icon: 'mdi:electric-switch'
     },
     {
       key: 'status_engine_running',
       name: 'Engine Running',
+      jsonPath: 'status.1018_6',
       valueTemplate: '{{ "ON" if value_json.status["1018_6"] else "OFF" }}',
       deviceClass: 'running',
       icon: 'mdi:engine'
@@ -671,6 +710,7 @@ function publishHassDiscovery(mq) {
     {
       key: 'status_gen_ok',
       name: 'Generator Hz/V OK',
+      jsonPath: 'status.1018_8',
       valueTemplate: '{{ "ON" if value_json.status["1018_8"] else "OFF" }}',
       icon: 'mdi:check-circle'
     },
@@ -678,6 +718,7 @@ function publishHassDiscovery(mq) {
     {
       key: 'status_running_timer',
       name: 'Running Detection Timer Expired',
+      jsonPath: 'status.1018_7',
       valueTemplate: '{{ "ON" if value_json.status["1018_7"] else "OFF" }}',
       entityCategory: 'diagnostic',
       icon: 'mdi:timer-check'
@@ -685,6 +726,7 @@ function publishHassDiscovery(mq) {
     {
       key: 'mode_off',
       name: 'Mode: OFF',
+      jsonPath: 'status.1019_0',
       valueTemplate: '{{ "ON" if value_json.status["1019_0"] else "OFF" }}',
       entityCategory: 'diagnostic',
       icon: 'mdi:power-off'
@@ -692,6 +734,7 @@ function publishHassDiscovery(mq) {
     {
       key: 'mode_manual',
       name: 'Mode: Manual',
+      jsonPath: 'status.1019_1',
       valueTemplate: '{{ "ON" if value_json.status["1019_1"] else "OFF" }}',
       entityCategory: 'diagnostic',
       icon: 'mdi:hand-back-right'
@@ -699,6 +742,7 @@ function publishHassDiscovery(mq) {
     {
       key: 'mode_auto',
       name: 'Mode: Auto',
+      jsonPath: 'status.1019_3',
       valueTemplate: '{{ "ON" if value_json.status["1019_3"] else "OFF" }}',
       entityCategory: 'diagnostic',
       icon: 'mdi:autorenew'
@@ -706,6 +750,7 @@ function publishHassDiscovery(mq) {
     {
       key: 'mode_test',
       name: 'Mode: Test',
+      jsonPath: 'status.1019_4',
       valueTemplate: '{{ "ON" if value_json.status["1019_4"] else "OFF" }}',
       entityCategory: 'diagnostic',
       icon: 'mdi:test-tube'
@@ -713,6 +758,7 @@ function publishHassDiscovery(mq) {
     {
       key: 'mode_island',
       name: 'Mode: Island',
+      jsonPath: 'status.1019_5',
       valueTemplate: '{{ "ON" if value_json.status["1019_5"] else "OFF" }}',
       entityCategory: 'diagnostic',
       icon: 'mdi:island'
@@ -720,6 +766,7 @@ function publishHassDiscovery(mq) {
     {
       key: 'mode_amf',
       name: 'Mode: AMF',
+      jsonPath: 'status.1019_6',
       valueTemplate: '{{ "ON" if value_json.status["1019_6"] else "OFF" }}',
       entityCategory: 'diagnostic',
       icon: 'mdi:auto-mode'
@@ -727,6 +774,7 @@ function publishHassDiscovery(mq) {
     {
       key: 'load_takeover',
       name: 'Load Take Over',
+      jsonPath: 'status.1019_10',
       valueTemplate: '{{ "ON" if value_json.status["1019_10"] else "OFF" }}',
       entityCategory: 'diagnostic',
       icon: 'mdi:transfer'
@@ -734,6 +782,7 @@ function publishHassDiscovery(mq) {
     {
       key: 'amf_active',
       name: 'AMF Active',
+      jsonPath: 'status.1019_15',
       valueTemplate: '{{ "ON" if value_json.status["1019_15"] else "OFF" }}',
       entityCategory: 'diagnostic',
       icon: 'mdi:lightning-bolt'
@@ -791,7 +840,8 @@ function publishHassDiscovery(mq) {
       if (packet && packet.retain) return; // ignore retained commands
       handleCommand(topic);
     });
-    console.log(`Command topics enabled (${cmdTopicSet.size} topics, cooldown ${CMD_COOLDOWN_MS}ms)`);
+    const enabledNames = ENABLED_COMMANDS.map(c => c.key).join(', ');
+    console.log(`Command topics enabled (${cmdTopicSet.size} topics, cooldown ${CMD_COOLDOWN_MS}ms): ${enabledNames}`);
   } else {
     console.log('Command topics disabled (no ENABLE_COMMAND_* flags set)');
   }
@@ -803,6 +853,13 @@ function publishHassDiscovery(mq) {
   publish(mq, 'device/model', DEVICE_MODEL, true);
   publish(mq, 'device/manufacturer', DEVICE_MANUFACTURER, true);
   publish(mq, 'device/name', DEVICE_NAME, true);
+
+  let prevActiveAlarmKeys = new Set();
+  let prevEngineRunning = null;
+  let lastRunStarted = null;
+  let lastRunStopped = null;
+  let lastRunStartedMs = null;
+  let lastRunDurationSeconds = null;
 
   async function readAndPublish() {
     // Read measurement table block 500..576
@@ -825,69 +882,98 @@ function publishHassDiscovery(mq) {
       count: getReg(b, R.ALARM_COUNT),
       unacknowledged: getReg(b, R.ALARM_UNACK),
       ack_active: getReg(b, R.ALARM_ACK_ACTIVE),
-      bitfield: {},
       active: []
     };
 
-    // Add alarm bitfields as hex strings
-    for (let i = 0; i < ALARM_COUNT; i++) {
-      const regAddr = ALARM_START + i;
-      alarms.bitfield[regAddr] = toHex(alarmRegs[i]);
+    if (PUBLISH_ALARM_BITFIELDS) {
+      alarms.bitfield = {};
+      for (let i = 0; i < ALARM_COUNT; i++) {
+        const regAddr = ALARM_START + i;
+        alarms.bitfield[regAddr] = toHex(alarmRegs[i]);
+      }
     }
 
     // Decode active alarms with descriptions
     alarms.active = decodeAlarms(alarmRegs);
+
+    const currentActiveAlarmKeys = new Set();
+    const activatedAlarms = [];
+    for (const a of alarms.active) {
+      const key = `${a.register}:${a.bit}`;
+      currentActiveAlarmKeys.add(key);
+      if (!prevActiveAlarmKeys.has(key)) activatedAlarms.push(a);
+    }
+
+    const clearedAlarms = [];
+    for (const key of prevActiveAlarmKeys) {
+      if (!currentActiveAlarmKeys.has(key)) clearedAlarms.push(key);
+    }
+
+    if (activatedAlarms.length > 0) {
+      const msg = activatedAlarms.map(a => `${a.register}:${a.bit} (${a.code} ${a.text})`).join('; ');
+      console.log(`Alarms set: ${msg}`);
+    }
+    if (clearedAlarms.length > 0) {
+      const msg = clearedAlarms.map(describeAlarmKey).join('; ');
+      console.log(`Alarms cleared: ${msg}`);
+    }
+
+    prevActiveAlarmKeys = currentActiveAlarmKeys;
     alarms.active_text = formatActiveAlarms(alarms.active);
 
     // Decode status bits from registers 1018-1019
     const status = decodeStatus(alarmRegs);
     status.operating_mode = getOperatingModeText(status);
 
+    // Engine run/stop logging based on status 1018:6 (Engine running)
+    const engineRunning = !!status['1018_6'];
+    if (prevEngineRunning === null) {
+      prevEngineRunning = engineRunning;
+    } else if (engineRunning !== prevEngineRunning) {
+      console.log(engineRunning ? 'Engine status: STARTED' : 'Engine status: STOPPED');
+      const nowIso = new Date().toISOString();
+      if (engineRunning) {
+        lastRunStarted = nowIso;
+        lastRunStartedMs = Date.now();
+        publish(mq, 'status/last_run_started', lastRunStarted, true);
+      } else {
+        lastRunStopped = nowIso;
+        const stopMs = Date.now();
+        if (lastRunStartedMs !== null) {
+          const durationSec = Math.max(0, Math.round((stopMs - lastRunStartedMs) / 1000));
+          lastRunDurationSeconds = durationSec;
+          publish(mq, 'status/last_run_duration_s', lastRunDurationSeconds, true);
+        }
+        publish(mq, 'status/last_run_stopped', lastRunStopped, true);
+      }
+      prevEngineRunning = engineRunning;
+    }
+
     const counters = readCounters(b);
 
     const rpm = getReg(b, R.RPM);
     const usupplyV = readUsupply(b);
 
-    publish(mq, 'state', {
-      device: {
-        id: HASS_DEVICE_ID,
-        name: DEVICE_NAME,
-        manufacturer: DEVICE_MANUFACTURER,
-        model: DEVICE_MODEL,
-      },
-      app_version: appVersion,
-      gen,
-      mains,
-      run_hours: runHours,
-      energy_kwh: energyKwh,
-      energy_signed_kwh: energySignedKwh,
-      alarms,
-      counters,
-      status,
-      rpm,
-      usupply_v: usupplyV,
-      ts: new Date().toISOString(),
-    });
-
-    if (PUBLISH_INDIVIDUAL) {
-      publishFlat(mq, 'device', {
-        id: HASS_DEVICE_ID,
-        name: DEVICE_NAME,
-        manufacturer: DEVICE_MANUFACTURER,
-        model: DEVICE_MODEL,
-      }, true);
-      publishFlat(mq, 'gen', gen, RETAIN);
-      publishFlat(mq, 'mains', mains, RETAIN);
-      publish(mq, 'run_hours', runHours, RETAIN);
-      publish(mq, 'energy_kwh', energyKwh, RETAIN);
-      publish(mq, 'energy_signed_kwh', energySignedKwh, RETAIN);
-      publishFlat(mq, 'alarms', alarms, RETAIN);
-      publishFlat(mq, 'counters', counters, RETAIN);
-      publishFlat(mq, 'status', status, RETAIN);
-      publish(mq, 'rpm', rpm, RETAIN);
-      publish(mq, 'usupply_v', usupplyV, RETAIN);
-      publish(mq, 'ts', new Date().toISOString(), RETAIN);
-    }
+    publishFlat(mq, 'device', {
+      id: HASS_DEVICE_ID,
+      name: DEVICE_NAME,
+      manufacturer: DEVICE_MANUFACTURER,
+      model: DEVICE_MODEL,
+    }, true);
+    publishFlat(mq, 'gen', gen, RETAIN);
+    publishFlat(mq, 'mains', mains, RETAIN);
+    publish(mq, 'run_hours', runHours, RETAIN);
+    publish(mq, 'energy_kwh', energyKwh, RETAIN);
+    publish(mq, 'energy_signed_kwh', energySignedKwh, RETAIN);
+    publishFlat(mq, 'alarms', alarms, RETAIN);
+    publishFlat(mq, 'counters', counters, RETAIN);
+    publishFlat(mq, 'status', status, RETAIN);
+    publish(mq, 'rpm', rpm, RETAIN);
+    publish(mq, 'usupply_v', usupplyV, RETAIN);
+    publish(mq, 'last_run_started', lastRunStarted, RETAIN);
+    publish(mq, 'last_run_stopped', lastRunStopped, RETAIN);
+    publish(mq, 'last_run_duration_s', lastRunDurationSeconds, RETAIN);
+    publish(mq, 'ts', new Date().toISOString(), RETAIN);
   }
 
   const run = async () => {
