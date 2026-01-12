@@ -1,14 +1,18 @@
 {
-  "name": "deif-mqtt",
+  "name": "deif-ha-bridge",
   "version": "1.0.0",
-  "main": "index.js",
+  "main": "deif_to_mqtt.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
   "author": "Anton.Viktorov@live.com",
-  "license": "ISC",
-  "description": "",
+  "license": "MIT",
+  "description": "DEIF GC-1F/2 Modbus RTU to MQTT bridge with Home Assistant discovery",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/latonita/deif-ha-bridge.git"
+  },
   "dependencies": {
     "dotenv": "^17.2.3",
     "modbus-serial": "^8.0.23",

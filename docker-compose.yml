@@ -1,7 +1,7 @@
 services:
-  deif-mqtt:
+  deif-ha-bridge:
     build: .
-    container_name: deif-mqtt
+    container_name: deif-ha-bridge
     restart: unless-stopped
 
     # Load your config

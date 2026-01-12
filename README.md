@@ -1,6 +1,6 @@
 # deif-ha-bridge (DEIF GC-1F/2 to HASS via MQTT)
 
-Bridge the DEIF GC-1F/2 generator controller (Modbus RTU) to MQTT so Home Assistant can discover and track everything without custom code.
+Bridge the DEIF GC-1F/2 generator controller (Modbus RTU) to MQTT so Home Assistant can discover and track everything without custom code. Repo: https://github.com/latonita/deif-ha-bridge
 
 ## Features
 - Fresh data every few seconds: power, energy, run hours, alarms, status, and more.
@@ -15,6 +15,14 @@ Bridge the DEIF GC-1F/2 generator controller (Modbus RTU) to MQTT so Home Assist
 - MQTT broker reachable from the container/host.
 - Node.js 20+ if running locally (Docker image includes runtime).
 
+## Getting Started
+1) Clone: `git clone https://github.com/latonita/deif-ha-bridge.git && cd deif-ha-bridge`
+2) Configure: create `.env` using the variables below.
+3) Run:
+   - Docker Compose: `docker compose up --build`
+   - Docker: `docker build -t deif-ha-bridge .` then `docker run --rm --device /dev/ttyUSB0:/dev/ttyUSB0 --group-add dialout --env-file .env deif-ha-bridge`
+   - Local: `npm ci --omit=dev && node deif_to_mqtt.js`
+
 ## Commands (optional, per-flag)
 - Opt-in per action: set `ENABLE_COMMAND_<NAME>=true`. Only enabled commands publish HA buttons and listen on MQTT.
 - Topics and flags:
@@ -26,6 +34,8 @@ Bridge the DEIF GC-1F/2 generator controller (Modbus RTU) to MQTT so Home Assist
   - Mode Manual / Mode Auto / Mode Test → `<TOPIC_PREFIX>/cmd/mode_manual`, `/cmd/mode_auto`, `/cmd/mode_test` (`ENABLE_COMMAND_MANUAL_MODE`, `ENABLE_COMMAND_AUTO_MODE`, `ENABLE_COMMAND_TEST`)
 - Global cooldown across all commands via `CMD_COOLDOWN_MS` (default 5000ms).
 - Retained command messages are ignored. Secure your MQTT broker/ACLs so only trusted clients can publish to `.../cmd/#`.
+
+See `COMMANDS.md` for a concise command/register summary table.
 
 ## Configuration
 Set environment variables (example `.env`):
@@ -73,7 +83,7 @@ The provided `docker-compose.yml` maps `/dev/ttyUSB0` and adds the `dialout` gro
 ## Build/Run Container Manually
 Build the minimal image:
 ```
-docker build -t deif-mqtt .
+docker build -t deif-ha-bridge .
 ```
 Run with the serial device mapped and dialout group:
 ```
@@ -81,7 +91,7 @@ docker run --rm \
   --device /dev/ttyUSB0:/dev/ttyUSB0 \
   --group-add dialout \
   --env-file .env \
-  deif-mqtt
+  deif-ha-bridge
 ```
 
 ## Run Locally (without Docker)
@@ -99,3 +109,6 @@ Ensure your user has permission to `/dev/ttyUSB0` (often by being in the `dialou
 - Serial permission: verify the container has `dialout` (or correct GID) and the device is mapped.
 - MQTT connection failures exit the process; check broker URL/credentials.
 - Modbus timeouts are logged and retried on the next poll.
+
+## License
+- MIT; see `LICENSE`.
