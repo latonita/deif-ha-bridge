@@ -9,7 +9,7 @@ Bridge the DEIF GC-1F/2 generator controller (Modbus RTU) to MQTT so Home Assist
 - Clear alarm handling: separates alarms from status bits and prints active alarms in plain text.
 - Optional control buttons for alarm acknowledge, start/stop/breakers, and Manual/Auto/Test modes, guarded by a global cooldown and safe handling of retained MQTT messages.
 - Built for small, secure deployments (distroless image, dialout-ready for serial devices).
-- Tracks and retains engine last-run timestamps and last run duration when start/stop status changes.
+- Tracks and retains engine last-run timestamps and last run duration when start/stop status changes; retains last alarm timestamps/summary and a formatted "Last Alarm" text.
 
 ## Requirements
 - DEIF GC-1F/2 controller on RS-485.
@@ -52,7 +52,6 @@ MQTT_PASS=
 TOPIC_PREFIX=deif/gc1f2
 INTERVAL_MS=5000
 RETAIN=true
-PUBLISH_INDIVIDUAL_TOPICS=true
 PUBLISH_ALARM_BITFIELDS=false
 ENABLE_COMMAND_ALARM_ACK=false
 ENABLE_COMMAND_START=false
@@ -74,7 +73,7 @@ Key notes:
 - Frequency divisor/decimals can be tuned via `FREQ_DIVISOR` and `FREQ_DECIMALS` if your device scales differently.
 - `INTERVAL_MS=0` runs once and exits (useful for tests).
 - Status registers 1018-1019 are published under `status.*`, not treated as alarms.
-- Discovery templates point to per-metric topics; no consolidated `state` payload is published (per-metric topics are always on).
+- Discovery templates point to per-metric topics; no consolidated `state` payload is published (per-metric topics are always on). Last run/alarm timestamps and Last Alarm text are retained.
 
 ## Run with Docker Compose
 ```

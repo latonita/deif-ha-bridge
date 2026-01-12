@@ -634,6 +634,7 @@ function publishHassDiscovery(mq) {
     { key: 'last_run_started', name: 'Last Run Started', jsonPath: 'last_run_started', deviceClass: 'timestamp', entityCategory: 'diagnostic', icon: 'mdi:clock-start' },
     { key: 'last_run_stopped', name: 'Last Run Stopped', jsonPath: 'last_run_stopped', deviceClass: 'timestamp', entityCategory: 'diagnostic', icon: 'mdi:clock-end' },
     { key: 'last_run_duration_s', name: 'Last Run Duration', jsonPath: 'last_run_duration_s', unit: 's', stateClass: 'measurement', entityCategory: 'diagnostic', icon: 'mdi:timer-outline' },
+    { key: 'last_alarm_text', name: 'Last Alarm', jsonPath: 'alarms.last_text', entityCategory: 'diagnostic', icon: 'mdi:alert-decagram' },
     
     // Operating mode (primary status)
     { key: 'operating_mode', name: 'Operating Mode', jsonPath: 'status.operating_mode', icon: 'mdi:state-machine' },
@@ -860,6 +861,10 @@ function publishHassDiscovery(mq) {
   let lastRunStopped = null;
   let lastRunStartedMs = null;
   let lastRunDurationSeconds = null;
+  let lastAlarmSetAt = null;
+  let lastAlarmSetSummary = null;
+  let lastAlarmClearedAt = null;
+  let lastAlarmText = null;
 
   async function readAndPublish() {
     // Read measurement table block 500..576
@@ -911,10 +916,22 @@ function publishHassDiscovery(mq) {
 
     if (activatedAlarms.length > 0) {
       const msg = activatedAlarms.map(a => `${a.register}:${a.bit} (${a.code} ${a.text})`).join('; ');
+      const now = new Date();
+      const nowIso = now.toISOString();
+      const nowText = `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, '0')}/${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+      lastAlarmSetAt = nowIso;
+      lastAlarmSetSummary = msg;
+      lastAlarmText = `${nowText} ${msg}`;
+      publish(mq, 'alarms/last_set_at', lastAlarmSetAt, true);
+      publish(mq, 'alarms/last_set_summary', lastAlarmSetSummary, true);
+      publish(mq, 'alarms/last_text', lastAlarmText, true);
       console.log(`Alarms set: ${msg}`);
     }
     if (clearedAlarms.length > 0) {
       const msg = clearedAlarms.map(describeAlarmKey).join('; ');
+      const nowIso = new Date().toISOString();
+      lastAlarmClearedAt = nowIso;
+      publish(mq, 'alarms/last_cleared_at', lastAlarmClearedAt, true);
       console.log(`Alarms cleared: ${msg}`);
     }
 
@@ -966,13 +983,20 @@ function publishHassDiscovery(mq) {
     publish(mq, 'energy_kwh', energyKwh, RETAIN);
     publish(mq, 'energy_signed_kwh', energySignedKwh, RETAIN);
     publishFlat(mq, 'alarms', alarms, RETAIN);
+    if (lastAlarmText) publish(mq, 'alarms/last_text', lastAlarmText, RETAIN);
+    if (lastAlarmSetAt) publish(mq, 'alarms/last_set_at', lastAlarmSetAt, RETAIN);
+    if (lastAlarmSetSummary) publish(mq, 'alarms/last_set_summary', lastAlarmSetSummary, RETAIN);
+    if (lastAlarmClearedAt) publish(mq, 'alarms/last_cleared_at', lastAlarmClearedAt, RETAIN);
     publishFlat(mq, 'counters', counters, RETAIN);
     publishFlat(mq, 'status', status, RETAIN);
     publish(mq, 'rpm', rpm, RETAIN);
     publish(mq, 'usupply_v', usupplyV, RETAIN);
-    publish(mq, 'last_run_started', lastRunStarted, RETAIN);
-    publish(mq, 'last_run_stopped', lastRunStopped, RETAIN);
-    publish(mq, 'last_run_duration_s', lastRunDurationSeconds, RETAIN);
+    if (lastRunStarted) publish(mq, 'last_run_started', lastRunStarted, RETAIN);
+    if (lastRunStopped) publish(mq, 'last_run_stopped', lastRunStopped, RETAIN);
+    if (lastRunDurationSeconds !== null) publish(mq, 'last_run_duration_s', lastRunDurationSeconds, RETAIN);
+    if (lastAlarmSetAt) publish(mq, 'last_alarm_set_at', lastAlarmSetAt, RETAIN);
+    if (lastAlarmSetSummary) publish(mq, 'last_alarm_set_summary', lastAlarmSetSummary, RETAIN);
+    if (lastAlarmClearedAt) publish(mq, 'last_alarm_cleared_at', lastAlarmClearedAt, RETAIN);
     publish(mq, 'ts', new Date().toISOString(), RETAIN);
   }
 
