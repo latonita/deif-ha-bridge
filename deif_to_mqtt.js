@@ -21,6 +21,8 @@ const TOPIC_PREFIX = (process.env.TOPIC_PREFIX || 'deif/gc1f2').replace(/\/+$/, 
 const INTERVAL_MS = parseInt(process.env.INTERVAL_MS || '5000', 10);
 const RETAIN = (process.env.RETAIN || 'true').toLowerCase() === 'true';
 const PUBLISH_INDIVIDUAL = (process.env.PUBLISH_INDIVIDUAL_TOPICS || 'true').toLowerCase() === 'true';
+const ENABLE_COMMANDS = (process.env.ENABLE_COMMANDS || 'false').toLowerCase() === 'true';
+const CMD_COOLDOWN_MS = parseInt(process.env.CMD_COOLDOWN_MS || '5000', 10);
 
 // Static device metadata
 const DEVICE_MODEL = process.env.DEVICE_MODEL || 'DEIF GC-1F/2';
@@ -31,6 +33,12 @@ const DEVICE_NAME = process.env.DEVICE_NAME || `DEIF GC-1F/2 (${SLAVE_ID})`;
 const HASS_DISCOVERY_PREFIX = (process.env.HASS_DISCOVERY_PREFIX || 'homeassistant').replace(/\/+$/, '');
 const HASS_NODE_ID = process.env.HASS_NODE_ID || `deif-gc1f2-${SLAVE_ID}`;
 const HASS_DEVICE_ID = process.env.HASS_DEVICE_ID || HASS_NODE_ID;
+
+const CMD_TOPICS = {
+  alarmAck: `${TOPIC_PREFIX}/cmd/alarm_ack`,
+  manualMode: `${TOPIC_PREFIX}/cmd/mode_manual`,
+  autoMode: `${TOPIC_PREFIX}/cmd/mode_auto`,
+};
 
 // Manual says Hz/100, but your device shows 500 for 50.0 Hz -> divisor 10.
 // Keep configurable.
@@ -99,6 +107,11 @@ const MEAS_COUNT = (MEAS_END - MEAS_START) + 1;
 const ALARM_START = 1000;
 const ALARM_END = 1019;
 const ALARM_COUNT = (ALARM_END - ALARM_START) + 1;
+
+// Command flags (FC0F write-only) zero-based offsets
+const CMD_FLAG_ALARM_ACK = 10; // Alarm acknowledge
+const CMD_FLAG_MANUAL_MODE = 28;
+const CMD_FLAG_AUTO_MODE = 30;
 
 // Alarm descriptions: key format is "register:bit"
 const ALARM_MAP = {
@@ -352,6 +365,49 @@ async function readInputBlock(mb, start, count) {
   return res.data; // array of 16-bit register values
 }
 
+async function writeCommandFlag(mb, offset) {
+  await mb.writeCoils(offset, [true]);
+}
+
+async function acknowledgeAlarms(mb) {
+  await writeCommandFlag(mb, CMD_FLAG_ALARM_ACK);
+}
+
+async function setManualMode(mb) {
+  await writeCommandFlag(mb, CMD_FLAG_MANUAL_MODE);
+}
+
+async function setAutoMode(mb) {
+  await writeCommandFlag(mb, CMD_FLAG_AUTO_MODE);
+}
+
+function createCommandHandler(mb) {
+  let lastRun = 0;
+
+  function withinCooldown() {
+    const now = Date.now();
+    if (now - lastRun < CMD_COOLDOWN_MS) return false;
+    lastRun = now;
+    return true;
+  }
+
+  return async function handleCommand(topic) {
+    try {
+      if (!withinCooldown()) return;
+
+      if (topic === CMD_TOPICS.alarmAck) {
+        await acknowledgeAlarms(mb);
+      } else if (topic === CMD_TOPICS.manualMode) {
+        await setManualMode(mb);
+      } else if (topic === CMD_TOPICS.autoMode) {
+        await setAutoMode(mb);
+      }
+    } catch (err) {
+      console.error('Command error', topic, err && err.message ? err.message : err);
+    }
+  };
+}
+
 function getReg(block, addr) {
   const idx = addr - MEAS_START;
   if (idx < 0 || idx >= block.length) return undefined;
@@ -457,6 +513,25 @@ function publishHassDiscovery(mq) {
       device,
       ...(cfg.icon ? { ic: cfg.icon } : {}),
       ...(cfg.deviceClass ? { dev_cla: cfg.deviceClass } : {}),
+      ...(cfg.entityCategory ? { ent_cat: cfg.entityCategory } : {}),
+    };
+
+    mq.publish(topic, JSON.stringify(payload), { qos: 0, retain: true });
+  }
+
+  function pubButton(key, cfg) {
+    const objectId = `${HASS_NODE_ID}-${key}`;
+    const topic = `${HASS_DISCOVERY_PREFIX}/button/${HASS_NODE_ID}/${key}/config`;
+
+    const payload = {
+      name: cfg.name,
+      uniq_id: objectId,
+      obj_id: objectId,
+      cmd_t: cfg.commandTopic,
+      pl_prs: cfg.payloadPress || '1',
+      en: true,
+      device,
+      ...(cfg.icon ? { ic: cfg.icon } : {}),
       ...(cfg.entityCategory ? { ent_cat: cfg.entityCategory } : {}),
     };
 
@@ -646,6 +721,16 @@ function publishHassDiscovery(mq) {
   ];
 
   for (const bs of binarySensors) pubBinarySensor(bs.key, bs);
+
+  if (ENABLE_COMMANDS) {
+    const buttons = [
+      { key: 'cmd_alarm_ack', name: 'Alarm Acknowledge', commandTopic: CMD_TOPICS.alarmAck, icon: 'mdi:alarm-check' },
+      { key: 'cmd_mode_manual', name: 'Mode: Manual', commandTopic: CMD_TOPICS.manualMode, icon: 'mdi:hand-back-right' },
+      { key: 'cmd_mode_auto', name: 'Mode: Auto', commandTopic: CMD_TOPICS.autoMode, icon: 'mdi:autorenew' },
+    ];
+
+    for (const btn of buttons) pubButton(btn.key, btn);
+  }
 }
 
 /* =========================
@@ -675,6 +760,21 @@ function publishHassDiscovery(mq) {
   mb.setTimeout(1000);
 
   console.log(`DEIF ? MQTT started (MEAS 500+ only): slave=${SLAVE_ID} port=${SERIAL_PORT} mqtt=${MQTT_URL}`);
+
+  const handleCommand = createCommandHandler(mb);
+  const cmdTopicSet = new Set(Object.values(CMD_TOPICS));
+
+  if (ENABLE_COMMANDS) {
+    mq.subscribe(Array.from(cmdTopicSet));
+    mq.on('message', (topic, message, packet) => {
+      if (!cmdTopicSet.has(topic)) return;
+      if (packet && packet.retain) return; // ignore retained commands
+      handleCommand(topic);
+    });
+    console.log(`Command topics enabled (cooldown ${CMD_COOLDOWN_MS}ms)`);
+  } else {
+    console.log('Command topics disabled (ENABLE_COMMANDS=false)');
+  }
 
   // Send HA discovery ONCE (retained)
   publishHassDiscovery(mq);
