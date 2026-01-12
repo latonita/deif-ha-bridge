@@ -21,7 +21,6 @@ const TOPIC_PREFIX = (process.env.TOPIC_PREFIX || 'deif/gc1f2').replace(/\/+$/, 
 const INTERVAL_MS = parseInt(process.env.INTERVAL_MS || '5000', 10);
 const RETAIN = (process.env.RETAIN || 'true').toLowerCase() === 'true';
 const PUBLISH_INDIVIDUAL = (process.env.PUBLISH_INDIVIDUAL_TOPICS || 'true').toLowerCase() === 'true';
-const ENABLE_COMMANDS = (process.env.ENABLE_COMMANDS || 'false').toLowerCase() === 'true';
 const CMD_COOLDOWN_MS = parseInt(process.env.CMD_COOLDOWN_MS || '5000', 10);
 
 // Static device metadata
@@ -34,11 +33,22 @@ const HASS_DISCOVERY_PREFIX = (process.env.HASS_DISCOVERY_PREFIX || 'homeassista
 const HASS_NODE_ID = process.env.HASS_NODE_ID || `deif-gc1f2-${SLAVE_ID}`;
 const HASS_DEVICE_ID = process.env.HASS_DEVICE_ID || HASS_NODE_ID;
 
-const CMD_TOPICS = {
-  alarmAck: `${TOPIC_PREFIX}/cmd/alarm_ack`,
-  manualMode: `${TOPIC_PREFIX}/cmd/mode_manual`,
-  autoMode: `${TOPIC_PREFIX}/cmd/mode_auto`,
-};
+function envFlag(name, defaultValue = 'false') {
+  return (process.env[name] || defaultValue).toLowerCase() === 'true';
+}
+
+const ENABLE_COMMAND_ALARM_ACK = envFlag('ENABLE_COMMAND_ALARM_ACK');
+const ENABLE_COMMAND_MANUAL_MODE = envFlag('ENABLE_COMMAND_MANUAL_MODE');
+const ENABLE_COMMAND_AUTO_MODE = envFlag('ENABLE_COMMAND_AUTO_MODE');
+const ENABLE_COMMAND_START = envFlag('ENABLE_COMMAND_START');
+const ENABLE_COMMAND_GB_ON = envFlag('ENABLE_COMMAND_GB_ON');
+const ENABLE_COMMAND_GB_OFF = envFlag('ENABLE_COMMAND_GB_OFF');
+const ENABLE_COMMAND_STOP = envFlag('ENABLE_COMMAND_STOP');
+const ENABLE_COMMAND_START_GB_ON = envFlag('ENABLE_COMMAND_START_GB_ON');
+const ENABLE_COMMAND_GB_OFF_STOP = envFlag('ENABLE_COMMAND_GB_OFF_STOP');
+const ENABLE_COMMAND_MB_ON = envFlag('ENABLE_COMMAND_MB_ON');
+const ENABLE_COMMAND_MB_OFF = envFlag('ENABLE_COMMAND_MB_OFF');
+const ENABLE_COMMAND_TEST = envFlag('ENABLE_COMMAND_TEST');
 
 // Manual says Hz/100, but your device shows 500 for 50.0 Hz -> divisor 10.
 // Keep configurable.
@@ -109,9 +119,35 @@ const ALARM_END = 1019;
 const ALARM_COUNT = (ALARM_END - ALARM_START) + 1;
 
 // Command flags (FC0F write-only) zero-based offsets
-const CMD_FLAG_ALARM_ACK = 10; // Alarm acknowledge
+const CMD_FLAG_START = 1;
+const CMD_FLAG_GB_ON = 2;
+const CMD_FLAG_GB_OFF = 3;
+const CMD_FLAG_STOP = 4;
+const CMD_FLAG_ALARM_ACK = 10;
+const CMD_FLAG_START_GB_ON = 15;
+const CMD_FLAG_GB_OFF_STOP = 16;
+const CMD_FLAG_MB_ON = 25;
+const CMD_FLAG_MB_OFF = 26;
 const CMD_FLAG_MANUAL_MODE = 28;
 const CMD_FLAG_AUTO_MODE = 30;
+const CMD_FLAG_TEST = 31;
+
+const COMMAND_DEFS = [
+  { key: 'alarm_ack', name: 'Alarm Acknowledge', topic: `${TOPIC_PREFIX}/cmd/alarm_ack`, offset: CMD_FLAG_ALARM_ACK, enabled: ENABLE_COMMAND_ALARM_ACK, icon: 'mdi:alarm-check' },
+  { key: 'start', name: 'Start', topic: `${TOPIC_PREFIX}/cmd/start`, offset: CMD_FLAG_START, enabled: ENABLE_COMMAND_START, icon: 'mdi:play-circle' },
+  { key: 'gb_on', name: 'GB ON', topic: `${TOPIC_PREFIX}/cmd/gb_on`, offset: CMD_FLAG_GB_ON, enabled: ENABLE_COMMAND_GB_ON, icon: 'mdi:flash' },
+  { key: 'gb_off', name: 'GB OFF', topic: `${TOPIC_PREFIX}/cmd/gb_off`, offset: CMD_FLAG_GB_OFF, enabled: ENABLE_COMMAND_GB_OFF, icon: 'mdi:flash-off' },
+  { key: 'stop', name: 'Stop', topic: `${TOPIC_PREFIX}/cmd/stop`, offset: CMD_FLAG_STOP, enabled: ENABLE_COMMAND_STOP, icon: 'mdi:stop-circle' },
+  { key: 'start_gb_on', name: 'Start + GB ON', topic: `${TOPIC_PREFIX}/cmd/start_gb_on`, offset: CMD_FLAG_START_GB_ON, enabled: ENABLE_COMMAND_START_GB_ON, icon: 'mdi:play-network' },
+  { key: 'gb_off_stop', name: 'GB OFF + Stop', topic: `${TOPIC_PREFIX}/cmd/gb_off_stop`, offset: CMD_FLAG_GB_OFF_STOP, enabled: ENABLE_COMMAND_GB_OFF_STOP, icon: 'mdi:power-plug-off' },
+  { key: 'mb_on', name: 'MB ON', topic: `${TOPIC_PREFIX}/cmd/mb_on`, offset: CMD_FLAG_MB_ON, enabled: ENABLE_COMMAND_MB_ON, icon: 'mdi:transmission-tower-import' },
+  { key: 'mb_off', name: 'MB OFF', topic: `${TOPIC_PREFIX}/cmd/mb_off`, offset: CMD_FLAG_MB_OFF, enabled: ENABLE_COMMAND_MB_OFF, icon: 'mdi:transmission-tower-off' },
+  { key: 'mode_manual', name: 'Mode: Manual', topic: `${TOPIC_PREFIX}/cmd/mode_manual`, offset: CMD_FLAG_MANUAL_MODE, enabled: ENABLE_COMMAND_MANUAL_MODE, icon: 'mdi:hand-back-right' },
+  { key: 'mode_auto', name: 'Mode: Auto', topic: `${TOPIC_PREFIX}/cmd/mode_auto`, offset: CMD_FLAG_AUTO_MODE, enabled: ENABLE_COMMAND_AUTO_MODE, icon: 'mdi:autorenew' },
+  { key: 'mode_test', name: 'Mode: Test', topic: `${TOPIC_PREFIX}/cmd/mode_test`, offset: CMD_FLAG_TEST, enabled: ENABLE_COMMAND_TEST, icon: 'mdi:beaker' },
+];
+
+const ENABLED_COMMANDS = COMMAND_DEFS.filter(c => c.enabled);
 
 // Alarm descriptions: key format is "register:bit"
 const ALARM_MAP = {
@@ -369,20 +405,9 @@ async function writeCommandFlag(mb, offset) {
   await mb.writeCoils(offset, [true]);
 }
 
-async function acknowledgeAlarms(mb) {
-  await writeCommandFlag(mb, CMD_FLAG_ALARM_ACK);
-}
-
-async function setManualMode(mb) {
-  await writeCommandFlag(mb, CMD_FLAG_MANUAL_MODE);
-}
-
-async function setAutoMode(mb) {
-  await writeCommandFlag(mb, CMD_FLAG_AUTO_MODE);
-}
-
-function createCommandHandler(mb) {
+function createCommandHandler(mb, commands) {
   let lastRun = 0;
+  const commandByTopic = new Map(commands.map(c => [c.topic, c]));
 
   function withinCooldown() {
     const now = Date.now();
@@ -393,15 +418,10 @@ function createCommandHandler(mb) {
 
   return async function handleCommand(topic) {
     try {
+      const cmd = commandByTopic.get(topic);
+      if (!cmd) return;
       if (!withinCooldown()) return;
-
-      if (topic === CMD_TOPICS.alarmAck) {
-        await acknowledgeAlarms(mb);
-      } else if (topic === CMD_TOPICS.manualMode) {
-        await setManualMode(mb);
-      } else if (topic === CMD_TOPICS.autoMode) {
-        await setAutoMode(mb);
-      }
+      await writeCommandFlag(mb, cmd.offset);
     } catch (err) {
       console.error('Command error', topic, err && err.message ? err.message : err);
     }
@@ -722,14 +742,14 @@ function publishHassDiscovery(mq) {
 
   for (const bs of binarySensors) pubBinarySensor(bs.key, bs);
 
-  if (ENABLE_COMMANDS) {
-    const buttons = [
-      { key: 'cmd_alarm_ack', name: 'Alarm Acknowledge', commandTopic: CMD_TOPICS.alarmAck, icon: 'mdi:alarm-check' },
-      { key: 'cmd_mode_manual', name: 'Mode: Manual', commandTopic: CMD_TOPICS.manualMode, icon: 'mdi:hand-back-right' },
-      { key: 'cmd_mode_auto', name: 'Mode: Auto', commandTopic: CMD_TOPICS.autoMode, icon: 'mdi:autorenew' },
-    ];
-
-    for (const btn of buttons) pubButton(btn.key, btn);
+  if (ENABLED_COMMANDS.length > 0) {
+    for (const cmd of ENABLED_COMMANDS) {
+      pubButton(`cmd_${cmd.key}`, {
+        name: cmd.name,
+        commandTopic: cmd.topic,
+        icon: cmd.icon,
+      });
+    }
   }
 }
 
@@ -761,19 +781,19 @@ function publishHassDiscovery(mq) {
 
   console.log(`DEIF ? MQTT started (MEAS 500+ only): slave=${SLAVE_ID} port=${SERIAL_PORT} mqtt=${MQTT_URL}`);
 
-  const handleCommand = createCommandHandler(mb);
-  const cmdTopicSet = new Set(Object.values(CMD_TOPICS));
+  const handleCommand = createCommandHandler(mb, ENABLED_COMMANDS);
+  const cmdTopicSet = new Set(ENABLED_COMMANDS.map(c => c.topic));
 
-  if (ENABLE_COMMANDS) {
+  if (cmdTopicSet.size > 0) {
     mq.subscribe(Array.from(cmdTopicSet));
     mq.on('message', (topic, message, packet) => {
       if (!cmdTopicSet.has(topic)) return;
       if (packet && packet.retain) return; // ignore retained commands
       handleCommand(topic);
     });
-    console.log(`Command topics enabled (cooldown ${CMD_COOLDOWN_MS}ms)`);
+    console.log(`Command topics enabled (${cmdTopicSet.size} topics, cooldown ${CMD_COOLDOWN_MS}ms)`);
   } else {
-    console.log('Command topics disabled (ENABLE_COMMANDS=false)');
+    console.log('Command topics disabled (no ENABLE_COMMAND_* flags set)');
   }
 
   // Send HA discovery ONCE (retained)

@@ -232,12 +232,9 @@ Published to `deif/gc1f2/state`:
 3. Add to published state object
 4. Add sensor definition to `publishHassDiscovery()` sensors array
 
-### Enabling Commands (Alarm Ack / Mode)
-- Commands are disabled by default; set `ENABLE_COMMANDS=true` (optional `CMD_COOLDOWN_MS=5000`) to expose MQTT command topics and HA discovery buttons.
-- Command topics (write-only, no retain):
-  - Alarm acknowledge: `<TOPIC_PREFIX>/cmd/alarm_ack`
-  - Mode Manual: `<TOPIC_PREFIX>/cmd/mode_manual`
-  - Mode Auto: `<TOPIC_PREFIX>/cmd/mode_auto`
+### Enabling Commands (Alarm Ack / Mode / Breakers)
+- Commands are disabled by default; enable individually with `ENABLE_COMMAND_<NAME>=true` (optional `CMD_COOLDOWN_MS=5000`).
+- Command topics (write-only, no retain): alarm_ack, start, gb_on, gb_off, stop, start_gb_on, gb_off_stop, mb_on, mb_off, mode_manual, mode_auto, mode_test (all under `<TOPIC_PREFIX>/cmd/`).
 - The app enforces a global cooldown between any commands and ignores retained command messages. Secure MQTT with auth/ACLs to restrict publishes to these topics.
 
 ### Changing Polling Interval

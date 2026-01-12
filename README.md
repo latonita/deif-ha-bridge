@@ -1,25 +1,30 @@
-# DEIF GC-1F/2 to HASS via MQTT Bridge
+# deif-ha-bridge (DEIF GC-1F/2 to HASS via MQTT)
 
-Bridge the DEIF GC-1F/2 generator controller (Modbus RTU) to MQTT for automatic Home Assistant discovery.
+Bridge the DEIF GC-1F/2 generator controller (Modbus RTU) to MQTT so Home Assistant can discover and track everything without custom code.
 
 ## Features
-- Polls measurement registers 500-576 and alarm/status registers 1000-1019.
-- Publishes a consolidated JSON state to `TOPIC_PREFIX/state`.
-- Sends retained Home Assistant discovery for 50+ sensors/binary sensors.
-- Separates alarms from status bits and formats active alarm text.
-- Minimal distroless container image with dialout group support for serial devices.
+- Fresh data every few seconds: power, energy, run hours, alarms, status, and more.
+- One tidy JSON payload at `TOPIC_PREFIX/state`, plus optional per-metric topics when you want to dig in.
+- Home Assistant auto-discovery for 50+ sensors/binary sensors (retained for restart resilience).
+- Clear alarm handling: separates alarms from status bits and prints active alarms in plain text.
+- Optional control buttons for alarm acknowledge, start/stop/breakers, and Manual/Auto/Test modes, guarded by a global cooldown and safe handling of retained MQTT messages.
+- Built for small, secure deployments (distroless image, dialout-ready for serial devices).
 
 ## Requirements
 - DEIF GC-1F/2 controller on RS-485.
 - MQTT broker reachable from the container/host.
 - Node.js 20+ if running locally (Docker image includes runtime).
 
-## Commands (optional, gated)
-- Disabled by default. Set `ENABLE_COMMANDS=true` to expose command topics and Home Assistant buttons for:
-  - Alarm acknowledge → `<TOPIC_PREFIX>/cmd/alarm_ack`
-  - Mode Manual → `<TOPIC_PREFIX>/cmd/mode_manual`
-  - Mode Auto → `<TOPIC_PREFIX>/cmd/mode_auto`
-- Global cooldown between any commands via `CMD_COOLDOWN_MS` (default 5000ms).
+## Commands (optional, per-flag)
+- Opt-in per action: set `ENABLE_COMMAND_<NAME>=true`. Only enabled commands publish HA buttons and listen on MQTT.
+- Topics and flags:
+  - Alarm acknowledge → `<TOPIC_PREFIX>/cmd/alarm_ack` (`ENABLE_COMMAND_ALARM_ACK`)
+  - Start → `<TOPIC_PREFIX>/cmd/start` (`ENABLE_COMMAND_START`)
+  - GB ON / GB OFF / Stop → `<TOPIC_PREFIX>/cmd/gb_on`, `/cmd/gb_off`, `/cmd/stop` (`ENABLE_COMMAND_GB_ON`, `ENABLE_COMMAND_GB_OFF`, `ENABLE_COMMAND_STOP`)
+  - Start + GB ON / GB OFF + Stop → `<TOPIC_PREFIX>/cmd/start_gb_on`, `/cmd/gb_off_stop` (`ENABLE_COMMAND_START_GB_ON`, `ENABLE_COMMAND_GB_OFF_STOP`)
+  - MB ON / MB OFF → `<TOPIC_PREFIX>/cmd/mb_on`, `/cmd/mb_off` (`ENABLE_COMMAND_MB_ON`, `ENABLE_COMMAND_MB_OFF`)
+  - Mode Manual / Mode Auto / Mode Test → `<TOPIC_PREFIX>/cmd/mode_manual`, `/cmd/mode_auto`, `/cmd/mode_test` (`ENABLE_COMMAND_MANUAL_MODE`, `ENABLE_COMMAND_AUTO_MODE`, `ENABLE_COMMAND_TEST`)
+- Global cooldown across all commands via `CMD_COOLDOWN_MS` (default 5000ms).
 - Retained command messages are ignored. Secure your MQTT broker/ACLs so only trusted clients can publish to `.../cmd/#`.
 
 ## Configuration
@@ -37,6 +42,18 @@ TOPIC_PREFIX=deif/gc1f2
 INTERVAL_MS=5000
 RETAIN=true
 PUBLISH_INDIVIDUAL_TOPICS=true
+ENABLE_COMMAND_ALARM_ACK=false
+ENABLE_COMMAND_START=false
+ENABLE_COMMAND_GB_ON=false
+ENABLE_COMMAND_GB_OFF=false
+ENABLE_COMMAND_STOP=false
+ENABLE_COMMAND_START_GB_ON=false
+ENABLE_COMMAND_GB_OFF_STOP=false
+ENABLE_COMMAND_MB_ON=false
+ENABLE_COMMAND_MB_OFF=false
+ENABLE_COMMAND_MANUAL_MODE=false
+ENABLE_COMMAND_AUTO_MODE=false
+ENABLE_COMMAND_TEST=false
 
 HASS_DISCOVERY_PREFIX=homeassistant
 HASS_NODE_ID=deif-gc1f2-1

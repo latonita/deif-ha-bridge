@@ -34,12 +34,21 @@ All polled data is published to `TOPIC_PREFIX/state` as a single JSON. When `PUB
 
 ## MQTT → Modbus Commands (FC0F write coils)
 
-Commands are enabled only when `ENABLE_COMMANDS=true` and are rate-limited by `CMD_COOLDOWN_MS`. Retained MQTT messages are ignored.
+Commands are enabled individually with `ENABLE_COMMAND_<NAME>=true` and are rate-limited by `CMD_COOLDOWN_MS`. Retained MQTT messages are ignored.
 
-| MQTT Topic | Action | Modbus Coil Offset | Notes |
+| MQTT Topic | Action | Coil Offset | Enable Flag |
 | --- | --- | --- | --- |
-| `TOPIC_PREFIX/cmd/alarm_ack` | Acknowledge active alarms | `10` | Triggers `acknowledgeAlarms()` → `writeCoils(10, [true])`. |
-| `TOPIC_PREFIX/cmd/mode_manual` | Switch controller to Manual mode | `28` | Triggers `setManualMode()` → `writeCoils(28, [true])`. |
-| `TOPIC_PREFIX/cmd/mode_auto` | Switch controller to Auto mode | `30` | Triggers `setAutoMode()` → `writeCoils(30, [true])`. |
+| `TOPIC_PREFIX/cmd/start` | Start | `1` | `ENABLE_COMMAND_START` |
+| `TOPIC_PREFIX/cmd/gb_on` | Generator breaker ON | `2` | `ENABLE_COMMAND_GB_ON` |
+| `TOPIC_PREFIX/cmd/gb_off` | Generator breaker OFF | `3` | `ENABLE_COMMAND_GB_OFF` |
+| `TOPIC_PREFIX/cmd/stop` | Stop | `4` | `ENABLE_COMMAND_STOP` |
+| `TOPIC_PREFIX/cmd/alarm_ack` | Acknowledge active alarms | `10` | `ENABLE_COMMAND_ALARM_ACK` |
+| `TOPIC_PREFIX/cmd/start_gb_on` | Start and GB ON | `15` | `ENABLE_COMMAND_START_GB_ON` |
+| `TOPIC_PREFIX/cmd/gb_off_stop` | GB OFF and Stop | `16` | `ENABLE_COMMAND_GB_OFF_STOP` |
+| `TOPIC_PREFIX/cmd/mb_on` | Mains breaker ON | `25` | `ENABLE_COMMAND_MB_ON` |
+| `TOPIC_PREFIX/cmd/mb_off` | Mains breaker OFF | `26` | `ENABLE_COMMAND_MB_OFF` |
+| `TOPIC_PREFIX/cmd/mode_manual` | Switch to Manual mode | `28` | `ENABLE_COMMAND_MANUAL_MODE` |
+| `TOPIC_PREFIX/cmd/mode_auto` | Switch to Auto mode | `30` | `ENABLE_COMMAND_AUTO_MODE` |
+| `TOPIC_PREFIX/cmd/mode_test` | Switch to Test mode | `31` | `ENABLE_COMMAND_TEST` |
 
 MQTT discovery buttons in Home Assistant publish to these topics so operators do not need to craft payloads manually.
