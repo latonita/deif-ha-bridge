@@ -584,7 +584,7 @@ function publishHassDiscovery(mq) {
 
   const sensors = [
     // Metadata / diagnostics
-    { key: 'app_version', name: 'App Version', jsonPath: 'app_version', entityCategory: 'diagnostic', icon: 'mdi:information' },
+    { key: 'app_version', name: 'App Version', jsonPath: 'device.app_version', entityCategory: 'diagnostic', icon: 'mdi:information' },
     { key: 'device_model', name: 'Device Model', jsonPath: 'device.model', entityCategory: 'diagnostic', icon: 'mdi:chip' },
     { key: 'timestamp', name: 'Last Seen', jsonPath: 'ts', deviceClass: 'timestamp', entityCategory: 'diagnostic', icon: 'mdi:clock' },
 
@@ -608,14 +608,14 @@ function publishHassDiscovery(mq) {
     { key: 'mains_frequency', name: 'Mains Frequency', jsonPath: 'mains.frequency_hz', deviceClass: 'frequency', unit: 'Hz', stateClass: 'measurement', icon: 'mdi:waveform' },
 
     // Counters
-    { key: 'run_hours', name: 'Generator Run Hours', jsonPath: 'run_hours', unit: 'h', stateClass: 'total_increasing', icon: 'mdi:timer-outline' },
-    { key: 'energy_kwh', name: 'Energy Produced', jsonPath: 'energy_kwh', deviceClass: 'energy', unit: 'kWh', stateClass: 'total_increasing', icon: 'mdi:lightning-bolt' },
+    { key: 'run_hours', name: 'Generator Run Hours', jsonPath: 'counters.run_hours', unit: 'h', stateClass: 'total_increasing', icon: 'mdi:timer-outline' },
+    { key: 'energy_kwh', name: 'Energy Produced', jsonPath: 'counters.energy_kwh', deviceClass: 'energy', unit: 'kWh', stateClass: 'total_increasing', icon: 'mdi:lightning-bolt' },
 
     // Alarms (primary)
     { key: 'active_alarms_text', name: 'Active Alarms', jsonPath: 'alarms.active_text', icon: 'mdi:alarm-light' },
 
     // Battery/supply
-    { key: 'usupply_v', name: 'Battery Voltage', jsonPath: 'usupply_v', deviceClass: 'voltage', unit: 'V', stateClass: 'measurement', icon: 'mdi:car-battery' },
+    { key: 'engine_battery', name: 'Battery Voltage', jsonPath: 'engine.battery', deviceClass: 'voltage', unit: 'V', stateClass: 'measurement', icon: 'mdi:car-battery' },
 
     // Alarms (diagnostic)
     { key: 'alarm_count', name: 'Alarms Total', jsonPath: 'alarms.count', stateClass: 'measurement', entityCategory: 'diagnostic', icon: 'mdi:counter' },
@@ -623,17 +623,17 @@ function publishHassDiscovery(mq) {
     { key: 'alarm_ack_active', name: 'Alarms Acknowledged Active', jsonPath: 'alarms.ack_active', stateClass: 'measurement', entityCategory: 'diagnostic', icon: 'mdi:alert-circle-check' },
 
     // Energy/counters (diagnostic)
-    { key: 'energy_signed_kwh', name: 'Energy Produced (Signed)', jsonPath: 'energy_signed_kwh', unit: 'kWh', entityCategory: 'diagnostic', icon: 'mdi:swap-horizontal' },
+    { key: 'energy_signed_kwh', name: 'Energy Produced (Signed)', jsonPath: 'counters.energy_signed_kwh', unit: 'kWh', entityCategory: 'diagnostic', icon: 'mdi:swap-horizontal' },
     { key: 'gen_breaker_ops', name: 'Generator Breaker Operations', jsonPath: 'counters.gen_breaker_ops', stateClass: 'total_increasing', entityCategory: 'diagnostic', icon: 'mdi:electric-switch' },
     { key: 'mains_breaker_ops', name: 'Mains Breaker Operations', jsonPath: 'counters.mains_breaker_ops', stateClass: 'total_increasing', entityCategory: 'diagnostic', icon: 'mdi:electric-switch' },
     { key: 'start_attempts', name: 'Start Attempts', jsonPath: 'counters.start_attempts', stateClass: 'total_increasing', entityCategory: 'diagnostic', icon: 'mdi:restart' },
 
 
     // Technical (diagnostic)
-    { key: 'rpm', name: 'Engine RPM', jsonPath: 'rpm', unit: 'RPM', stateClass: 'measurement', entityCategory: 'diagnostic', icon: 'mdi:engine' },
-    { key: 'last_run_started', name: 'Last Run Started', jsonPath: 'last_run_started', deviceClass: 'timestamp', entityCategory: 'diagnostic', icon: 'mdi:clock-start' },
-    { key: 'last_run_stopped', name: 'Last Run Stopped', jsonPath: 'last_run_stopped', deviceClass: 'timestamp', entityCategory: 'diagnostic', icon: 'mdi:clock-end' },
-    { key: 'last_run_duration_s', name: 'Last Run Duration', jsonPath: 'last_run_duration_s', unit: 's', stateClass: 'measurement', entityCategory: 'diagnostic', icon: 'mdi:timer-outline' },
+    { key: 'rpm', name: 'Engine RPM', jsonPath: 'engine.rpm', unit: 'RPM', stateClass: 'measurement', entityCategory: 'diagnostic', icon: 'mdi:engine' },
+    { key: 'last_run_started', name: 'Last Run Started', jsonPath: 'engine.last_run_started', deviceClass: 'timestamp', entityCategory: 'diagnostic', icon: 'mdi:clock-start' },
+    { key: 'last_run_stopped', name: 'Last Run Stopped', jsonPath: 'engine.last_run_stopped', deviceClass: 'timestamp', entityCategory: 'diagnostic', icon: 'mdi:clock-end' },
+    { key: 'last_run_duration_s', name: 'Last Run Duration', jsonPath: 'engine.last_run_duration_s', unit: 's', stateClass: 'measurement', entityCategory: 'diagnostic', icon: 'mdi:timer-outline' },
     { key: 'last_alarm_text', name: 'Last Alarm', jsonPath: 'alarms.last_text', entityCategory: 'diagnostic', icon: 'mdi:alert-decagram' },
     
     // Operating mode (primary status)
@@ -966,22 +966,25 @@ function publishHassDiscovery(mq) {
       prevEngineRunning = engineRunning;
     }
 
-    const counters = readCounters(b);
+    const counters = {
+      ...readCounters(b),
+      run_hours: runHours,
+      energy_kwh: energyKwh,
+      energy_signed_kwh: energySignedKwh,
+    };
 
     const rpm = getReg(b, R.RPM);
-    const usupplyV = readUsupply(b);
+    const batteryVoltage = readUsupply(b);
 
     publishFlat(mq, 'device', {
       id: HASS_DEVICE_ID,
       name: DEVICE_NAME,
       manufacturer: DEVICE_MANUFACTURER,
       model: DEVICE_MODEL,
+      app_version: appVersion,
     }, true);
     publishFlat(mq, 'gen', gen, RETAIN);
     publishFlat(mq, 'mains', mains, RETAIN);
-    publish(mq, 'run_hours', runHours, RETAIN);
-    publish(mq, 'energy_kwh', energyKwh, RETAIN);
-    publish(mq, 'energy_signed_kwh', energySignedKwh, RETAIN);
     publishFlat(mq, 'alarms', alarms, RETAIN);
     if (lastAlarmText) publish(mq, 'alarms/last_text', lastAlarmText, RETAIN);
     if (lastAlarmSetAt) publish(mq, 'alarms/last_set_at', lastAlarmSetAt, RETAIN);
@@ -989,14 +992,14 @@ function publishHassDiscovery(mq) {
     if (lastAlarmClearedAt) publish(mq, 'alarms/last_cleared_at', lastAlarmClearedAt, RETAIN);
     publishFlat(mq, 'counters', counters, RETAIN);
     publishFlat(mq, 'status', status, RETAIN);
-    publish(mq, 'rpm', rpm, RETAIN);
-    publish(mq, 'usupply_v', usupplyV, RETAIN);
-    if (lastRunStarted) publish(mq, 'last_run_started', lastRunStarted, RETAIN);
-    if (lastRunStopped) publish(mq, 'last_run_stopped', lastRunStopped, RETAIN);
-    if (lastRunDurationSeconds !== null) publish(mq, 'last_run_duration_s', lastRunDurationSeconds, RETAIN);
-    if (lastAlarmSetAt) publish(mq, 'last_alarm_set_at', lastAlarmSetAt, RETAIN);
-    if (lastAlarmSetSummary) publish(mq, 'last_alarm_set_summary', lastAlarmSetSummary, RETAIN);
-    if (lastAlarmClearedAt) publish(mq, 'last_alarm_cleared_at', lastAlarmClearedAt, RETAIN);
+    publish(mq, 'engine/rpm', rpm, RETAIN);
+    publish(mq, 'engine/battery', batteryVoltage, RETAIN);
+    if (lastRunStarted) publish(mq, 'engine/last_run_started', lastRunStarted, RETAIN);
+    if (lastRunStopped) publish(mq, 'engine/last_run_stopped', lastRunStopped, RETAIN);
+    if (lastRunDurationSeconds !== null) publish(mq, 'engine/last_run_duration_s', lastRunDurationSeconds, RETAIN);
+    if (lastAlarmSetAt) publish(mq, 'alarms/last_set_at', lastAlarmSetAt, RETAIN);
+    if (lastAlarmSetSummary) publish(mq, 'alarms/last_set_summary', lastAlarmSetSummary, RETAIN);
+    if (lastAlarmClearedAt) publish(mq, 'alarms/last_cleared_at', lastAlarmClearedAt, RETAIN);
     publish(mq, 'ts', new Date().toISOString(), RETAIN);
   }
 

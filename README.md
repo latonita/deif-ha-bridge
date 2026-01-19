@@ -4,7 +4,7 @@ Bridge the DEIF GC-1F/2 generator controller (Modbus RTU) to MQTT so Home Assist
 
 ## Features
 - Fresh data every few seconds: power, energy, run hours, alarms, status, and more.
-- Per-metric topics only (no consolidated state payload).
+- Per-metric topics only (no consolidated state payload). Key paths: `gen/*`, `mains/*`, `engine/*` (includes RPM/battery/last-run data), `alarms/*`, `status/*`, `counters/*` (run hours, energy, breaker counters).
 - Home Assistant auto-discovery for 50+ sensors/binary sensors (retained for restart resilience).
 - Clear alarm handling: separates alarms from status bits and prints active alarms in plain text.
 - Optional control buttons for alarm acknowledge, start/stop/breakers, and Manual/Auto/Test modes, guarded by a global cooldown and safe handling of retained MQTT messages.

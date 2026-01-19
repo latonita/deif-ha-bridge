@@ -165,8 +165,13 @@ HASS_NODE_ID=deif-gc1f2-1
 Published to `deif/gc1f2/state`:
 ```json
 {
-  "device": { "id": "...", "name": "...", "model": "...", "manufacturer": "..." },
-  "app_version": "2.2.20",
+  "device": {
+    "id": "...",
+    "name": "...",
+    "model": "...",
+    "manufacturer": "...",
+    "app_version": "2.2.20"
+  },
   "gen": {
     "voltage_l1n_v": 230,
     "voltage_l2n_v": 231,
@@ -181,9 +186,7 @@ Published to `deif/gc1f2/state`:
     "cos_phi": 0.95
   },
   "mains": { "voltage_l1n_v": 230, "voltage_l2n_v": 231, "voltage_l3n_v": 229, "frequency_hz": 50.0 },
-  "run_hours": 12345,
-  "energy_kwh": 54321,
-  "energy_signed_kwh": -54321,
+  "engine": { "rpm": 1500, "battery": 13.8 },
   "alarms": {
     "count": 0,
     "unacknowledged": 0,
@@ -192,7 +195,14 @@ Published to `deif/gc1f2/state`:
     "active": [],
     "active_text": "No active alarms"
   },
-  "counters": { "gen_breaker_ops": 100, "mains_breaker_ops": 50, "start_attempts": 200 },
+  "counters": {
+    "run_hours": 12345,
+    "energy_kwh": 54321,
+    "energy_signed_kwh": -54321,
+    "gen_breaker_ops": 100,
+    "mains_breaker_ops": 50,
+    "start_attempts": 200
+  },
   "status": {
     "1018_0": false,
     "1018_1": true,
@@ -210,8 +220,6 @@ Published to `deif/gc1f2/state`:
     "1019_15": true,
     "operating_mode": "Auto (AMF, AMF Active)"
   },
-  "rpm": 1500,
-  "usupply_v": 13.8,
   "ts": "2026-01-05T12:34:56.789Z"
 }
 ```

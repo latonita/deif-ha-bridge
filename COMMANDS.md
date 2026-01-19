@@ -6,20 +6,20 @@ This project polls Modbus input registers from the DEIF GC-1F/2 controller and p
 
 | Register | Purpose | MQTT Field (in `state`) |
 | --- | --- | --- |
-| 500 | Application version (X.Y.ZZ) | `app_version` |
+| 500 | Application version (X.Y.ZZ) | `device.app_version` |
 | 504-506 | Generator voltage L1/L2/L3-N (V) | `gen.voltage_l{1..3}n_v` |
 | 507 | Generator frequency (Hz ÷ `FREQ_DIVISOR`) | `gen.frequency_hz` |
 | 513-515 | Generator current L1/L2/L3 (A) | `gen.current_l{1..3}_a` |
 | 519 / 523 / 527 | Generator active / reactive / apparent power (kW/kVAr/kVA, signed) | `gen.pgen_kw`, `gen.qgen_kvar`, `gen.sgen_kva` |
-| 536-537 | Energy counter (32-bit, kWh, unsigned) | `energy_kwh`, `energy_signed_kwh` (-copy) |
+| 536-537 | Energy counter (32-bit, kWh, unsigned) | `counters.energy_kwh`, `counters.energy_signed_kwh` (-copy) |
 | 538 | Power factor (cos φ × 100, signed) | `gen.cos_phi` |
 | 542-544 | Mains voltage L1/L2/L3-N (V) | `mains.voltage_l{1..3}n_v` |
 | 545 | Mains frequency (Hz ÷ `FREQ_DIVISOR`) | `mains.frequency_hz` |
-| 554-555 | Running hours (32-bit) | `run_hours` |
+| 554-555 | Running hours (32-bit) | `counters.run_hours` |
 | 558-560 | Alarm counters (total, unack, ack active) | `alarms.count`, `alarms.unacknowledged`, `alarms.ack_active` |
 | 563-564 / 566 | Generator breaker ops / mains breaker ops / start attempts | `counters.gen_breaker_ops`, `counters.mains_breaker_ops`, `counters.start_attempts` |
-| 567 | Battery/PSU voltage (V ÷ 10) | `usupply_v` |
-| 576 | Engine RPM | `rpm` |
+| 567 | Battery/PSU voltage (V ÷ 10) | `engine.battery` |
+| 576 | Engine RPM | `engine.rpm` |
 
 | Register Range | Purpose | MQTT Field (in `state`) |
 | --- | --- | --- |
