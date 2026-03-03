@@ -89,6 +89,10 @@ const R = {
   GEN_I_L2: 514,
   GEN_I_L3: 515,
 
+  GEN_P_L1: 516,
+  GEN_P_L2: 517,
+  GEN_P_L3: 518,
+
   PGEN: 519,
   QGEN: 523,
   SGEN: 527,
@@ -461,6 +465,12 @@ function readGen(block) {
     qgen_kvar: s16(getReg(block, R.QGEN)),
     sgen_kva: s16(getReg(block, R.SGEN)),
     cos_phi: s16(getReg(block, R.COS_PHI)) / 100.0,
+    pgen_l1_kw: s16(getReg(block, R.GEN_P_L1)),
+    pgen_l2_kw: s16(getReg(block, R.GEN_P_L2)),
+    pgen_l3_kw: s16(getReg(block, R.GEN_P_L3)),
+    apparent_l1_va: getReg(block, R.GEN_U_L1N) * getReg(block, R.GEN_I_L1),
+    apparent_l2_va: getReg(block, R.GEN_U_L2N) * getReg(block, R.GEN_I_L2),
+    apparent_l3_va: getReg(block, R.GEN_U_L3N) * getReg(block, R.GEN_I_L3),
   };
 }
 
@@ -600,6 +610,16 @@ function publishHassDiscovery(mq) {
     { key: 'gen_qgen', name: 'Generator Reactive Power', jsonPath: 'gen.qgen_kvar', unit: 'kVAr', stateClass: 'measurement', icon: 'mdi:flash-outline' },
     { key: 'gen_sgen', name: 'Generator Apparent Power', jsonPath: 'gen.sgen_kva', unit: 'kVA', stateClass: 'measurement', icon: 'mdi:flash-triangle' },
     { key: 'gen_cos_phi', name: 'Generator Power Factor', jsonPath: 'gen.cos_phi', stateClass: 'measurement', icon: 'mdi:cosine-wave' },
+
+    // Per-phase active power (from DEIF registers, integer kW)
+    { key: 'gen_pgen_l1', name: 'Generator Active Power L1', jsonPath: 'gen.pgen_l1_kw', deviceClass: 'power', unit: 'kW', stateClass: 'measurement', icon: 'mdi:flash' },
+    { key: 'gen_pgen_l2', name: 'Generator Active Power L2', jsonPath: 'gen.pgen_l2_kw', deviceClass: 'power', unit: 'kW', stateClass: 'measurement', icon: 'mdi:flash' },
+    { key: 'gen_pgen_l3', name: 'Generator Active Power L3', jsonPath: 'gen.pgen_l3_kw', deviceClass: 'power', unit: 'kW', stateClass: 'measurement', icon: 'mdi:flash' },
+
+    // Per-phase calculated apparent power (V x I, watt-level resolution)
+    { key: 'gen_apparent_l1', name: 'Generator Apparent Power L1', jsonPath: 'gen.apparent_l1_va', deviceClass: 'apparent_power', unit: 'VA', stateClass: 'measurement', icon: 'mdi:flash-triangle' },
+    { key: 'gen_apparent_l2', name: 'Generator Apparent Power L2', jsonPath: 'gen.apparent_l2_va', deviceClass: 'apparent_power', unit: 'VA', stateClass: 'measurement', icon: 'mdi:flash-triangle' },
+    { key: 'gen_apparent_l3', name: 'Generator Apparent Power L3', jsonPath: 'gen.apparent_l3_va', deviceClass: 'apparent_power', unit: 'VA', stateClass: 'measurement', icon: 'mdi:flash-triangle' },
 
     // Mains
     { key: 'mains_voltage_l1n', name: 'Mains Voltage L1-N', jsonPath: 'mains.voltage_l1n_v', deviceClass: 'voltage', unit: 'V', stateClass: 'measurement', icon: 'mdi:transmission-tower' },
