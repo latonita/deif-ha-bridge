@@ -1,0 +1,9 @@
+.git
+.codex
+doc
+README.md
+AGENTS.md
+COMMANDS.md
+LICENSE
+docker-compose.yml
+deif-ha-bridge

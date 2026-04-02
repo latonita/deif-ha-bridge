@@ -8,13 +8,13 @@ Bridge the DEIF GC-1F/2 generator controller (Modbus RTU) to MQTT so Home Assist
 - Home Assistant auto-discovery for 50+ sensors/binary sensors (retained for restart resilience).
 - Clear alarm handling: separates alarms from status bits and prints active alarms in plain text.
 - Optional control buttons for alarm acknowledge, start/stop/breakers, and Manual/Auto/Test modes, guarded by a global cooldown and safe handling of retained MQTT messages.
-- Built for small, secure deployments (distroless image, dialout-ready for serial devices).
+- Go runtime with serialized Modbus access, no overlapping poll cycles, and a multi-stage Docker build using `golang:1.24-alpine` for the builder and `alpine:3.23` for the final runtime image.
 - Tracks and retains engine last-run timestamps and last run duration when start/stop status changes; retains last alarm timestamps/summary and a formatted "Last Alarm" text.
 
 ## Requirements
 - DEIF GC-1F/2 controller on RS-485.
 - MQTT broker reachable from the container/host.
-- Node.js 20+ if running locally (Docker image includes runtime).
+- Go 1.24+ if running locally (Docker image includes runtime).
 
 ## Getting Started
 1) Clone: `git clone https://github.com/latonita/deif-ha-bridge.git && cd deif-ha-bridge`
@@ -22,7 +22,7 @@ Bridge the DEIF GC-1F/2 generator controller (Modbus RTU) to MQTT so Home Assist
 3) Run:
    - Docker Compose: `docker compose up --build -d`
    - Docker: `docker build -t deif-ha-bridge .` then `docker run --rm --device /dev/ttyUSB0:/dev/ttyUSB0 --group-add dialout --env-file .env deif-ha-bridge`
-   - Local: `npm ci --omit=dev && node deif_to_mqtt.js`
+   - Local: export the variables from `.env`, then run `go run .`
 
 ## Commands (optional, per-flag)
 - Opt-in per action: set `ENABLE_COMMAND_<NAME>=true`. Only enabled commands publish HA buttons and listen on MQTT.
@@ -53,6 +53,7 @@ TOPIC_PREFIX=deif/gc1f2
 INTERVAL_MS=5000
 RETAIN=true
 PUBLISH_ALARM_BITFIELDS=false
+PUBLISH_STATUS_FLAGS=false
 ENABLE_COMMAND_ALARM_ACK=false
 ENABLE_COMMAND_START=false
 ENABLE_COMMAND_GB_ON=false
@@ -72,8 +73,10 @@ HASS_NODE_ID=deif-gc1f2-1
 Key notes:
 - Frequency divisor/decimals can be tuned via `FREQ_DIVISOR` and `FREQ_DECIMALS` if your device scales differently.
 - `INTERVAL_MS=0` runs once and exits (useful for tests).
-- Status registers 1018-1019 are published under `status.*`, not treated as alarms.
+- Status registers 1018-1019 are decoded internally for derived values such as `status.operating_mode`, but the individual `status/1018_*` and `status/1019_*` topics and HA entities are only exposed when `PUBLISH_STATUS_FLAGS=true`.
 - Discovery templates point to per-metric topics; no consolidated `state` payload is published (per-metric topics are always on). Last run/alarm timestamps and Last Alarm text are retained.
+- Alarm bitfield topics and HA entities are only exposed when `PUBLISH_ALARM_BITFIELDS=true`.
+- The Go binary does not read `.env` automatically on local runs. Use shell exports such as `export $(grep -v '^#' .env | xargs)` before `go run .`, or pass variables explicitly.
 
 ## Run with Docker Compose
 ```
@@ -97,14 +100,15 @@ docker run --rm \
 
 ## Run Locally (without Docker)
 ```
-npm ci --omit=dev
-node deif_to_mqtt.js
+export $(grep -v '^#' .env | xargs)
+go run .
 ```
 Ensure your user has permission to `/dev/ttyUSB0` (often by being in the `dialout` group).
 
 ## Home Assistant
 - Discovery messages are retained; entities appear automatically under the configured `HASS_DISCOVERY_PREFIX`.
-- Alarm bitfields are only published (and discovered) when `PUBLISH_ALARM_BITFIELDS=true`.
+- Alarm bitfields are only published and discovered when `PUBLISH_ALARM_BITFIELDS=true`.
+- Individual status flag entities based on registers `1018` and `1019` are only published and discovered when `PUBLISH_STATUS_FLAGS=true`.
 - Numeric keys in JSON require bracket notation in templates: `{{ value_json.alarms.bitfield['1000'] }}`.
 
 ## Troubleshooting

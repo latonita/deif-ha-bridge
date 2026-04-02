@@ -1,8 +1,12 @@
 services:
   deif-ha-bridge:
-    build: .
+    image: deif-ha-bridge:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: deif-ha-bridge
     restart: unless-stopped
+    init: true
 
     # Load your config
     env_file:

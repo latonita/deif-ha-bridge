@@ -4,7 +4,7 @@ This project polls Modbus input registers from the DEIF GC-1F/2 controller and p
 
 ## Polled Registers (FC04)
 
-| Register | Purpose | MQTT Field (in `state`) |
+| Register | Purpose | MQTT Field |
 | --- | --- | --- |
 | 500 | Application version (X.Y.ZZ) | `device.app_version` |
 | 504-506 | Generator voltage L1/L2/L3-N (V) | `gen.voltage_l{1..3}n_v` |
@@ -21,12 +21,12 @@ This project polls Modbus input registers from the DEIF GC-1F/2 controller and p
 | 567 | Battery/PSU voltage (V ÷ 10) | `engine.battery` |
 | 576 | Engine RPM | `engine.rpm` |
 
-| Register Range | Purpose | MQTT Field (in `state`) |
+| Register Range | Purpose | MQTT Field |
 | --- | --- | --- |
 | 1000-1005, 1010-1011, 1013-1015 | Alarm bitfields; decoded to human-readable alarms | `alarms.bitfield['<reg>']` (hex), `alarms.active`, `alarms.active_text` |
 | 1018-1019 | Status bitfields (operating mode, mains failure, breaker/engine state) | `status['1018_#']`, `status['1019_#']`, `status.operating_mode` |
 
-All polled data is published under per-metric topics (e.g., `deif/gc1f2/gen/voltage_l1n_v`). No consolidated `state` payload is published. Alarm bitfields are only included in HA discovery when `PUBLISH_ALARM_BITFIELDS=true`.
+All polled data is published under per-metric topics (for example, `deif/gc1f2/gen/voltage_l1n_v`). No consolidated `state` payload is published. Alarm bitfields are only exposed when `PUBLISH_ALARM_BITFIELDS=true`, and individual decoded status flags from registers `1018-1019` are only exposed when `PUBLISH_STATUS_FLAGS=true`.
 
 ## Reference
 
